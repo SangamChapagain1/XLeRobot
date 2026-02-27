@@ -22,25 +22,36 @@ from ..config import RobotConfig
 
 
 def xlerobot_cameras_config() -> dict[str, CameraConfig]:
+    # ---------------------------------------------------------------------------
+    # JETSON CAMERA SETUP
+    # Run this on the Jetson to find your camera indices:
+    #   ls /dev/video*
+    #   v4l2-ctl --list-devices
+    # Then uncomment and update the paths below.
+    # Typical layout for XLeRobot bimanual:
+    #   /dev/video0  = front / head camera
+    #   /dev/video2  = left wrist camera
+    #   /dev/video4  = right wrist camera
+    # (USB cameras often appear on even indices; odd are metadata streams)
+    # ---------------------------------------------------------------------------
     return {
-        # "left_wrist": OpenCVCameraConfig(
-        #     index_or_path="/dev/video0", fps=30, width=640, height=480, rotation=Cv2Rotation.NO_ROTATION
-        # ),
+        "front": OpenCVCameraConfig(
+            index_or_path="/dev/video0", fps=30, width=640, height=480, rotation=Cv2Rotation.NO_ROTATION
+        ),
+        "left_wrist": OpenCVCameraConfig(
+            index_or_path="/dev/video2", fps=30, width=640, height=480, rotation=Cv2Rotation.NO_ROTATION
+        ),
+        "right_wrist": OpenCVCameraConfig(
+            index_or_path="/dev/video4", fps=30, width=640, height=480, rotation=Cv2Rotation.NO_ROTATION
+        ),
 
-        # "right_wrist": OpenCVCameraConfig(
-        #     index_or_path="/dev/video2", fps=30, width=640, height=480, rotation=Cv2Rotation.NO_ROTATION
-        # ),  
-
-        # "head(RGDB)": OpenCVCameraConfig(
-        #     index_or_path="/dev/video2", fps=30, width=640, height=480, rotation=Cv2Rotation.NO_ROTATION
-        # ),                     
-        
+        # --- RealSense alternative (uncomment if using a RealSense on the head) ---
         # "head": RealSenseCameraConfig(
         #     serial_number_or_name="125322060037",  # Replace with camera SN
         #     fps=30,
         #     width=1280,
         #     height=720,
-        #     color_mode=ColorMode.BGR, # Request BGR output
+        #     color_mode=ColorMode.BGR,
         #     rotation=Cv2Rotation.NO_ROTATION,
         #     use_depth=True
         # ),
@@ -97,7 +108,8 @@ class XLerobotHostConfig:
     watchdog_timeout_ms: int = 500
 
     # If robot jitters decrease the frequency and monitor cpu load with `top` in cmd
-    max_loop_freq_hz: int = 30
+    # 50 Hz for bimanual WiFi teleop; drop back to 30 if Jetson CPU load is too high
+    max_loop_freq_hz: int = 50
 
 @RobotConfig.register_subclass("xlerobot_client")
 @dataclass
