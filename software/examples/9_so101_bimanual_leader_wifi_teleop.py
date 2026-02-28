@@ -64,8 +64,9 @@ JETSON_IP = "192.168.1.XXX"   # <-- CHANGE THIS
 
 # USB serial ports for the two SO101 leader arms on Mac
 # Find with: ls /dev/tty.usbserial-* or ls /dev/tty.usbmodem*
-LEFT_LEADER_PORT  = "/dev/tty.usbserial-LEFT"   # <-- CHANGE THIS
-RIGHT_LEADER_PORT = "/dev/tty.usbserial-RIGHT"  # <-- CHANGE THIS
+# Plug in one arm at a time and run `ls /dev/tty.usb*` before and after to identify each port
+LEFT_LEADER_PORT  = "/dev/tty.usbserial-LEFT"   # <-- CHANGE THIS (left arm = leader_arm_2)
+RIGHT_LEADER_PORT = "/dev/tty.usbserial-RIGHT"  # <-- CHANGE THIS (right arm = leader_arm_1)
 
 # Dataset settings (HuggingFace repo to push to, or set PUSH_TO_HUB=False)
 DATASET_REPO  = "SangamChapagain1/xlerobot_bimanual_demo"
@@ -315,12 +316,16 @@ def main():
         sys.exit(1)
 
     # ---- Connect leader arms -------------------------------------------
+    # id must match the calibration filename in:
+    # ~/.cache/huggingface/lerobot/calibration/teleoperators/so101_leader/{id}.json
+    # left arm  = leader_arm_2  (calibration/mac/teleoperators/so101_leader/leader_arm_2.json)
+    # right arm = leader_arm_1  (calibration/mac/teleoperators/so101_leader/leader_arm_1.json)
     logger.info(f"Connecting left  leader on {LEFT_LEADER_PORT}")
-    left_leader = SO101Leader(SO101LeaderConfig(port=LEFT_LEADER_PORT, id="left_leader"))
+    left_leader = SO101Leader(SO101LeaderConfig(port=LEFT_LEADER_PORT, id="leader_arm_2"))
     left_leader.connect(calibrate=True)
 
     logger.info(f"Connecting right leader on {RIGHT_LEADER_PORT}")
-    right_leader = SO101Leader(SO101LeaderConfig(port=RIGHT_LEADER_PORT, id="right_leader"))
+    right_leader = SO101Leader(SO101LeaderConfig(port=RIGHT_LEADER_PORT, id="leader_arm_1"))
     right_leader.connect(calibrate=True)
 
     # ---- Connect to Jetson via ZMQ -------------------------------------
