@@ -18,7 +18,7 @@ from lerobot.cameras.configs import CameraConfig, Cv2Rotation, ColorMode
 from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig
 from lerobot.cameras.realsense import RealSenseCamera, RealSenseCameraConfig
 
-from ..config import RobotConfig
+from lerobot.robots.config import RobotConfig
 
 
 def xlerobot_cameras_config() -> dict[str, CameraConfig]:
@@ -28,21 +28,14 @@ def xlerobot_cameras_config() -> dict[str, CameraConfig]:
     #   ls /dev/video*
     #   v4l2-ctl --list-devices
     # Then uncomment and update the paths below.
-    # Typical layout for XLeRobot bimanual:
+    # Current Jetson setup in this workspace:
     #   /dev/video0  = front / head camera
-    #   /dev/video2  = left wrist camera
-    #   /dev/video4  = right wrist camera
+    # Wrist cameras can be re-enabled later when connected.
     # (USB cameras often appear on even indices; odd are metadata streams)
     # ---------------------------------------------------------------------------
     return {
         "front": OpenCVCameraConfig(
             index_or_path="/dev/video0", fps=30, width=640, height=480, rotation=Cv2Rotation.NO_ROTATION
-        ),
-        "left_wrist": OpenCVCameraConfig(
-            index_or_path="/dev/video2", fps=30, width=640, height=480, rotation=Cv2Rotation.NO_ROTATION
-        ),
-        "right_wrist": OpenCVCameraConfig(
-            index_or_path="/dev/video4", fps=30, width=640, height=480, rotation=Cv2Rotation.NO_ROTATION
         ),
 
         # --- RealSense alternative (uncomment if using a RealSense on the head) ---

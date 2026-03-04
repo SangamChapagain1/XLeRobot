@@ -30,8 +30,8 @@ from lerobot.motors.feetech import (
     OperatingMode,
 )
 
-from ..robot import Robot
-from ..utils import ensure_safe_goal_position
+from lerobot.robots.robot import Robot
+from lerobot.robots.utils import ensure_safe_goal_position
 from .config_xlerobot import XLerobotConfig
 
 logger = logging.getLogger(__name__)
@@ -68,8 +68,6 @@ class XLerobot(Robot):
                 "left_arm_wrist_flex": self.calibration.get("left_arm_wrist_flex"),
                 "left_arm_wrist_roll": self.calibration.get("left_arm_wrist_roll"),
                 "left_arm_gripper": self.calibration.get("left_arm_gripper"),
-                "head_motor_1": self.calibration.get("head_motor_1"),
-                "head_motor_2": self.calibration.get("head_motor_2"),
             }
         else:
             calibration1 = self.calibration
@@ -84,9 +82,6 @@ class XLerobot(Robot):
                 "left_arm_wrist_flex": Motor(4, "sts3215", norm_mode_body),
                 "left_arm_wrist_roll": Motor(5, "sts3215", norm_mode_body),
                 "left_arm_gripper": Motor(6, "sts3215", MotorNormMode.RANGE_0_100),
-                # head
-                "head_motor_1": Motor(7, "sts3215", norm_mode_body),
-                "head_motor_2": Motor(8, "sts3215", norm_mode_body),
             },
             calibration= calibration1,
         )
@@ -98,9 +93,6 @@ class XLerobot(Robot):
                 "right_arm_wrist_flex": self.calibration.get("right_arm_wrist_flex"),
                 "right_arm_wrist_roll": self.calibration.get("right_arm_wrist_roll"),
                 "right_arm_gripper": self.calibration.get("right_arm_gripper"),
-                "base_left_wheel": self.calibration.get("base_left_wheel"),
-                "base_back_wheel": self.calibration.get("base_back_wheel"),
-                "base_right_wheel": self.calibration.get("base_right_wheel"),
             }
         else:
             calibration2 = self.calibration
@@ -114,10 +106,6 @@ class XLerobot(Robot):
                 "right_arm_wrist_flex": Motor(4, "sts3215", norm_mode_body),
                 "right_arm_wrist_roll": Motor(5, "sts3215", norm_mode_body),
                 "right_arm_gripper": Motor(6, "sts3215", MotorNormMode.RANGE_0_100),
-                # base
-                "base_left_wheel": Motor(7, "sts3215", MotorNormMode.RANGE_M100_100),
-                "base_back_wheel": Motor(8, "sts3215", MotorNormMode.RANGE_M100_100),
-                "base_right_wheel": Motor(9, "sts3215", MotorNormMode.RANGE_M100_100),
             },
             calibration=calibration2,
         )
@@ -176,8 +164,17 @@ class XLerobot(Robot):
         if self.is_connected:
             raise DeviceAlreadyConnectedError(f"{self} already connected")
 
-        self.bus1.connect()
-        self.bus2.connect()
+        try:
+            self.bus1.connect()
+        except Exception as e:
+            logger.warning(f"bus1 handshake failed ({e}); retrying with handshake disabled.")
+            self.bus1.connect(handshake=False)
+
+        try:
+            self.bus2.connect()
+        except Exception as e:
+            logger.warning(f"bus2 handshake failed ({e}); retrying with handshake disabled.")
+            self.bus2.connect(handshake=False)
         
         # Check if calibration file exists and ask user if they want to restore it
         if self.calibration_fpath.is_file():
@@ -531,14 +528,16 @@ class XLerobot(Robot):
         start = time.perf_counter()
         left_arm_pos = self.bus1.sync_read("Present_Position", self.left_arm_motors)
         right_arm_pos = self.bus2.sync_read("Present_Position", self.right_arm_motors)
-        head_pos = self.bus1.sync_read("Present_Position", self.head_motors)
-        base_wheel_vel = self.bus2.sync_read("Present_Velocity", self.base_motors)
-        
-        base_vel = self._wheel_raw_to_body(
-            base_wheel_vel["base_left_wheel"],
-            base_wheel_vel["base_back_wheel"],
-            base_wheel_vel["base_right_wheel"],
-        )
+        head_pos = self.bus1.sync_read("Present_Position", self.head_motors) if self.head_motors else {}
+        if self.base_motors:
+            base_wheel_vel = self.bus2.sync_read("Present_Velocity", self.base_motors)
+            base_vel = self._wheel_raw_to_body(
+                base_wheel_vel["base_left_wheel"],
+                base_wheel_vel["base_back_wheel"],
+                base_wheel_vel["base_right_wheel"],
+            )
+        else:
+            base_vel = {"x.vel": 0.0, "y.vel": 0.0, "theta.vel": 0.0}
         
         left_arm_state = {f"{k}.pos": v for k, v in left_arm_pos.items()}
         right_arm_state = {f"{k}.pos": v for k, v in right_arm_pos.items()}
@@ -584,10 +583,14 @@ class XLerobot(Robot):
         right_arm_pos = {k: v for k, v in action.items() if k.startswith("right_arm_") and k.endswith(".pos")}
         head_pos = {k: v for k, v in action.items() if k.startswith("head_") and k.endswith(".pos")}
         base_goal_vel = {k: v for k, v in action.items() if k.endswith(".vel")}
-        base_wheel_goal_vel = self._body_to_wheel_raw(
-            base_goal_vel.get("x.vel", 0.0),
-            base_goal_vel.get("y.vel", 0.0),
-            base_goal_vel.get("theta.vel", 0.0),
+        base_wheel_goal_vel = (
+            self._body_to_wheel_raw(
+                base_goal_vel.get("x.vel", 0.0),
+                base_goal_vel.get("y.vel", 0.0),
+                base_goal_vel.get("theta.vel", 0.0),
+            )
+            if self.base_motors
+            else {}
         )
         
         
@@ -632,6 +635,8 @@ class XLerobot(Robot):
         }
 
     def stop_base(self):
+        if not self.base_motors:
+            return
         self.bus2.sync_write("Goal_Velocity", dict.fromkeys(self.base_motors, 0), num_retry=5)
         logger.info("Base motors stopped")
 
