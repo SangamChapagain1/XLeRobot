@@ -27,9 +27,9 @@ def xlerobot_cameras_config() -> dict[str, CameraConfig]:
     # Run this on the Jetson to find your camera indices:
     #   ls /dev/video*
     #   v4l2-ctl --list-devices
-    # Then uncomment and update the paths below.
-    # Current Jetson setup in this workspace:
-    #   /dev/video0  = front / head camera
+    # This fork currently uses FRONT CAMERA ONLY for remote teleop and recording.
+    # Current setup:
+    #   /dev/video0 = front / head camera
     # Wrist cameras can be re-enabled later when connected.
     # (USB cameras often appear on even indices; odd are metadata streams)
     # ---------------------------------------------------------------------------

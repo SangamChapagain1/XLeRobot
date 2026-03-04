@@ -14,7 +14,7 @@ cd XLeRobot/software
 ## 2. Install dependencies
 
 ```bash
-# Create a venv (or use conda)
+# Create a venv (robotics_env)
 python3 -m venv ~/robotics_env
 source ~/robotics_env/bin/activate
 
@@ -27,9 +27,9 @@ pip install pyzmq opencv-python numpy
 # cd /path/to/lerobot && pip install -e .
 ```
 
-## 3. Find your camera /dev/video* paths
+## 3. Find your camera /dev/video* path
 
-Plug in all 3 USB cameras, then:
+Plug in the front camera, then:
 
 ```bash
 ls /dev/video*
@@ -39,15 +39,13 @@ v4l2-ctl --list-devices
 Typical output:
 ```
 /dev/video0   <- front / head camera
-/dev/video2   <- left wrist
-/dev/video4   <- right wrist
 ```
 
 USB cameras usually appear on **even** indices. Odd indices (video1, video3) are
 metadata streams — skip those.
 
-Update `config_xlerobot.py` → `xlerobot_cameras_config()` with the correct paths.
-They are already uncommented; just adjust the indices if yours differ.
+Update `config_xlerobot.py` → `xlerobot_cameras_config()` with the correct path.
+This fork uses front camera only by default.
 
 ## 4. Find your motor bus ports
 

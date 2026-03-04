@@ -29,7 +29,7 @@ The original XLeRobot repo already had ZMQ-based remote control infrastructure
 
 | File | What changed |
 |------|-------------|
-| `software/src/robots/xlerobot/config_xlerobot.py` | Enabled 3 USB cameras (front, left_wrist, right_wrist), bumped host loop to 50Hz |
+| `software/src/robots/xlerobot/config_xlerobot.py` | Enabled front USB camera (single-camera mode), bumped host loop to 50Hz |
 
 ---
 
@@ -40,9 +40,7 @@ MacBook Pro                          Jetson AGX Orin 64GB
 ─────────────────                    ──────────────────────────────────
 USB ── SO101 Leader Left  (arm 2)    Bus1 /dev/ttyACM0 ── SO101 Follower Left  (arm 2)
 USB ── SO101 Leader Right (arm 1)    Bus2 /dev/ttyACM1 ── SO101 Follower Right (arm 1)
-                                     USB ── Front camera
-                                     USB ── Left wrist camera
-                                     USB ── Right wrist camera
+                                     USB ── Front camera (only)
         │                                        │
         └──────────── WiFi / Tailscale ──────────┘
 ```
@@ -66,9 +64,9 @@ MAC (teleop computer)                JETSON (robot computer)
 │──── ZMQ PUSH port 5555 ──────────►│  ZMQ PULL (commands in)
 │◄─── ZMQ PULL port 5556 ────────────│  ZMQ PUSH (observations out)
 │                                    │   └─ 12 joint positions
-│  receives:                         │   └─ 3 camera frames (JPEG)
+│  receives:                         │   └─ front camera frame (JPEG)
 │  └─ follower joint state           │
-│  └─ 3 camera frames                │  xlerobot_host.py runs:
+│  └─ front camera frame             │  xlerobot_host.py runs:
 │  displays cameras (OpenCV)         │  - XLerobot (both arms + base)
 │                                    │  - camera capture
 │  R key → record episode            │  - ZMQ server
@@ -90,9 +88,9 @@ mkdir -p ~/.cache/huggingface/lerobot/calibration/robots/xlerobot/
 cp software/calibration/jetson/robots/xlerobot/my_xlerobot_pc.json \
    ~/.cache/huggingface/lerobot/calibration/robots/xlerobot/my_xlerobot_pc.json
 
-# 2. Find camera paths (plug in all 3 USB cameras first)
+# 2. Find camera path (front camera only)
 ls /dev/video*
-# Update config_xlerobot.py if your paths differ from /dev/video0,2,4
+# Update config_xlerobot.py if your path differs from /dev/video0
 
 # 3. Find motor bus paths
 ls /dev/ttyACM*
@@ -120,9 +118,9 @@ prompted for those specifically.
 nano software/examples/9_so101_bimanual_leader_wifi_teleop.py
 
 # Set these three values:
-JETSON_IP         = "192.168.x.x"          # Jetson's WiFi IP (run `ip addr` on Jetson)
-LEFT_LEADER_PORT  = "/dev/tty.usbserial-XX" # plug in left leader, run: ls /dev/tty.usb*
-RIGHT_LEADER_PORT = "/dev/tty.usbserial-YY" # plug in right leader, run: ls /dev/tty.usb*
+JETSON_IP         = "10.44.33.217"
+LEFT_LEADER_PORT  = "/dev/tty.usbmodem5A460815221"
+RIGHT_LEADER_PORT = "/dev/tty.usbmodem5A460829761"
 ```
 
 **Run teleop:**
@@ -144,8 +142,6 @@ Each timestep captures:
 - `action` — 12 leader joint positions (what you commanded)
 - `observation.state` — 12 follower joint positions (what the robot actually did)
 - `observation.images.front` — front camera frame
-- `observation.images.left_wrist` — left wrist camera frame
-- `observation.images.right_wrist` — right wrist camera frame
 
 This format is directly compatible with **pi0**, **pi0.5**, **SmolVLA** training.
 For **Groot N1.5**, a format conversion step is needed (Isaac Lab format).

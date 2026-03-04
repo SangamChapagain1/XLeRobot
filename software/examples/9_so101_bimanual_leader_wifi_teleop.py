@@ -7,7 +7,7 @@ the Jetson AGX Orin running xlerobot_host.py over WiFi (or Tailscale for interne
 
 Features:
   - Bimanual 12-DOF teleoperation (left + right SO101 leaders)
-  - Live camera display (front, left wrist, right wrist)
+  - Live camera display (front camera only)
   - LeRobot-format dataset recording (press R to toggle)
   - VLA inference mode with human intervention (press V to toggle)
   - Tailscale-compatible: swap JETSON_IP to Tailscale IP for internet use
@@ -60,13 +60,12 @@ logger = logging.getLogger(__name__)
 
 # Jetson IP on your WiFi LAN (run `ip addr` on Jetson to find it)
 # For internet via Tailscale, swap this to the Tailscale IP (100.x.x.x)
-JETSON_IP = "192.168.1.XXX"   # <-- CHANGE THIS
+JETSON_IP = "10.44.33.217"
 
 # USB serial ports for the two SO101 leader arms on Mac
-# Find with: ls /dev/tty.usbserial-* or ls /dev/tty.usbmodem*
-# Plug in one arm at a time and run `ls /dev/tty.usb*` before and after to identify each port
-LEFT_LEADER_PORT  = "/dev/tty.usbserial-LEFT"   # <-- CHANGE THIS (left arm = leader_arm_2)
-RIGHT_LEADER_PORT = "/dev/tty.usbserial-RIGHT"  # <-- CHANGE THIS (right arm = leader_arm_1)
+# left arm = leader_arm_2, right arm = leader_arm_1
+LEFT_LEADER_PORT = "/dev/tty.usbmodem5A460815221"
+RIGHT_LEADER_PORT = "/dev/tty.usbmodem5A460829761"
 
 # Dataset settings (HuggingFace repo to push to, or set PUSH_TO_HUB=False)
 DATASET_REPO  = "SangamChapagain1/xlerobot_bimanual_demo"
@@ -308,11 +307,11 @@ def main():
     logger.info("=" * 60)
 
     # ---- Validate config -----------------------------------------------
-    if "XXX" in JETSON_IP:
-        logger.error("Set JETSON_IP in the CONFIG section at the top of this file.")
+    if not JETSON_IP:
+        logger.error("JETSON_IP is empty in the CONFIG section.")
         sys.exit(1)
-    if "LEFT" in LEFT_LEADER_PORT or "RIGHT" in RIGHT_LEADER_PORT:
-        logger.error("Set LEFT_LEADER_PORT and RIGHT_LEADER_PORT in the CONFIG section.")
+    if not LEFT_LEADER_PORT or not RIGHT_LEADER_PORT:
+        logger.error("LEFT_LEADER_PORT or RIGHT_LEADER_PORT is empty in the CONFIG section.")
         sys.exit(1)
 
     # ---- Connect leader arms -------------------------------------------
