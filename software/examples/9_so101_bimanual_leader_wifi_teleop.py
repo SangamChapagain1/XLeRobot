@@ -38,9 +38,11 @@ import cv2
 import numpy as np
 
 # ---------------------------------------------------------------------------
-# Add lerobot to path (robotics_env already has it installed)
+# Add local source tree to path so `robots.*` imports resolve when running:
+#   python examples/9_so101_bimanual_leader_wifi_teleop.py
+# from the `software/` directory on macOS/Linux.
 # ---------------------------------------------------------------------------
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from lerobot.teleoperators.so101_leader import SO101Leader
 from lerobot.teleoperators.so101_leader.config_so101_leader import SO101LeaderConfig
