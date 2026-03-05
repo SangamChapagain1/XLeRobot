@@ -18,6 +18,7 @@ import base64
 import json
 import logging
 import time
+from pathlib import Path
 
 import cv2
 import zmq
@@ -48,6 +49,16 @@ class XLerobotHost:
 
 
 def main():
+    log_dir = Path(__file__).resolve().parents[3] / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = log_dir / "xlerobot_host.log"
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        handlers=[logging.StreamHandler(), logging.FileHandler(log_file, encoding="utf-8")],
+    )
+    logging.info(f"Writing host logs to {log_file}")
+
     logging.info("Configuring Xlerobot")
     robot_config = XLerobotConfig(id="my_xlerobot_pc")
     robot = XLerobot(robot_config)

@@ -41,6 +41,7 @@ def xlerobot_cameras_config() -> dict[str, CameraConfig]:
             height=480,
             rotation=Cv2Rotation.NO_ROTATION,
             color_mode=ColorMode.BGR,
+            warmup_s=4,
         ),
 
         # --- RealSense alternative (uncomment if using a RealSense on the head) ---

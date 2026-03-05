@@ -53,7 +53,14 @@ from lerobot.utils.constants import ACTION, OBS_STR
 from robots.xlerobot.xlerobot_client import XLerobotClient
 from robots.xlerobot.config_xlerobot import XLerobotClientConfig, xlerobot_cameras_config
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+LOG_FILE = LOG_DIR / "xlerobot_teleop.log"
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[logging.StreamHandler(), logging.FileHandler(LOG_FILE, encoding="utf-8")],
+)
 logger = logging.getLogger(__name__)
 
 # ===========================================================================
