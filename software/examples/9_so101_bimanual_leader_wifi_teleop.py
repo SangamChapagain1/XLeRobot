@@ -506,9 +506,18 @@ def main():
             logger.info("Waiting for dataset thread to finish...")
             dataset_thread.join()
 
-        robot.disconnect()
-        left_leader.disconnect()
-        right_leader.disconnect()
+        # Be tolerant to Ctrl+C during teardown (common in interactive teleop).
+        for name, disconnect_fn in (
+            ("robot client", robot.disconnect),
+            ("left leader", left_leader.disconnect),
+            ("right leader", right_leader.disconnect),
+        ):
+            try:
+                disconnect_fn()
+            except KeyboardInterrupt:
+                logger.info(f"Interrupted while disconnecting {name}.")
+            except Exception as e:
+                logger.warning(f"Error while disconnecting {name}: {e}")
         logger.info("Clean shutdown.")
 
 
