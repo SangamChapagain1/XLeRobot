@@ -79,6 +79,13 @@ TASK          = "bimanual task"  # describe the task for the dataset
 # Control frequency
 FPS = 30
 
+# Slow-speed smoothing to reduce follower arm jitter.
+# Higher alpha -> more responsive, lower alpha -> smoother.
+ACTION_SMOOTHING_ALPHA = 0.35
+# Ignore tiny command changes (units are leader action units).
+JOINT_DEADBAND = 0.25
+GRIPPER_DEADBAND = 0.4
+
 # Intervention threshold for VLA mode:
 # if any leader joint moves more than this (degrees) in one step, human override activates
 INTERVENTION_THRESHOLD_DEG = 3.0
@@ -133,6 +140,25 @@ def read_leaders(left_leader: SO101Leader, right_leader: SO101Leader) -> dict:
         action[f"{xlero_name}.pos"] = right_raw.get(f"{motor}.pos", 0.0)
 
     return action
+
+
+def smooth_action(raw_action: dict, prev_action: dict) -> dict:
+    """
+    Apply lightweight EMA smoothing + deadband to reduce low-speed servo jitter.
+    """
+    if not prev_action:
+        return raw_action.copy()
+
+    out = {}
+    a = ACTION_SMOOTHING_ALPHA
+    for key, raw in raw_action.items():
+        prev = prev_action.get(key, raw)
+        smoothed = prev + a * (raw - prev)
+        deadband = GRIPPER_DEADBAND if "gripper" in key else JOINT_DEADBAND
+        if abs(smoothed - prev) < deadband:
+            smoothed = prev
+        out[key] = float(smoothed)
+    return out
 
 
 # ===========================================================================
@@ -357,6 +383,7 @@ def main():
     recording   = False
     vla_mode    = VLA_ENABLED_AT_START
     prev_leader_action: dict = {}
+    prev_smoothed_action: dict = {}
 
     logger.info("Ready! Controls:  R=record  V=VLA mode  Q/ESC=quit")
 
@@ -365,7 +392,9 @@ def main():
             loop_start = time.perf_counter()
 
             # ---- Read leader arms --------------------------------------
-            leader_action = read_leaders(left_leader, right_leader)
+            raw_leader_action = read_leaders(left_leader, right_leader)
+            leader_action = smooth_action(raw_leader_action, prev_smoothed_action)
+            prev_smoothed_action = leader_action.copy()
 
             # ---- VLA inference + intervention detection ----------------
             if vla_mode:

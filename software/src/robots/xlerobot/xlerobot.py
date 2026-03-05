@@ -579,9 +579,27 @@ class XLerobot(Robot):
         if not self.is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
         
-        left_arm_pos = {k: v for k, v in action.items() if k.startswith("left_arm_") and k.endswith(".pos")}
-        right_arm_pos = {k: v for k, v in action.items() if k.startswith("right_arm_") and k.endswith(".pos")}
-        head_pos = {k: v for k, v in action.items() if k.startswith("head_") and k.endswith(".pos")}
+        left_arm_pos = {
+            k: v
+            for k, v in action.items()
+            if k.startswith("left_arm_")
+            and k.endswith(".pos")
+            and k.replace(".pos", "") in self.left_arm_motors
+        }
+        right_arm_pos = {
+            k: v
+            for k, v in action.items()
+            if k.startswith("right_arm_")
+            and k.endswith(".pos")
+            and k.replace(".pos", "") in self.right_arm_motors
+        }
+        head_pos = {
+            k: v
+            for k, v in action.items()
+            if k.startswith("head_")
+            and k.endswith(".pos")
+            and k.replace(".pos", "") in self.head_motors
+        }
         base_goal_vel = {k: v for k, v in action.items() if k.endswith(".vel")}
         base_wheel_goal_vel = (
             self._body_to_wheel_raw(
@@ -645,8 +663,14 @@ class XLerobot(Robot):
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
         self.stop_base()
-        self.bus1.disconnect(self.config.disable_torque_on_disconnect)
-        self.bus2.disconnect(self.config.disable_torque_on_disconnect)
+        try:
+            self.bus1.disconnect(self.config.disable_torque_on_disconnect)
+        except Exception as e:
+            logger.warning(f"bus1 disconnect warning: {e}")
+        try:
+            self.bus2.disconnect(self.config.disable_torque_on_disconnect)
+        except Exception as e:
+            logger.warning(f"bus2 disconnect warning: {e}")
         for cam in self.cameras.values():
             cam.disconnect()
 
