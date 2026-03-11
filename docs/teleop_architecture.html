@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XLeRobot Bimanual WiFi Teleop Architecture</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0e17;
+  --surface: #111827;
+  --surface2: #1a2236;
+  --border: #2a3a5c;
+  --accent-mac: #f59e0b;
+  --accent-jetson: #10b981;
+  --accent-zmq: #6366f1;
+  --accent-data: #ec4899;
+  --accent-vla: #8b5cf6;
+  --text: #e2e8f0;
+  --text-dim: #94a3b8;
+  --text-bright: #f8fafc;
+  --red: #ef4444;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; }
+.container { max-width: 1200px; margin: 0 auto; padding: 40px 24px 80px; }
+
+h1 { font-family: 'JetBrains Mono', monospace; font-size: 2rem; font-weight: 700; color: var(--text-bright); text-align: center; margin-bottom: 12px; }
+.subtitle { text-align: center; color: var(--text-dim); font-size: 1rem; margin-bottom: 60px; }
+.section-label { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 3px; color: var(--accent-zmq); margin-bottom: 16px; }
+.section-title { font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; font-weight: 700; color: var(--text-bright); margin-bottom: 8px; }
+.section-desc { color: var(--text-dim); font-size: 0.95rem; margin-bottom: 32px; line-height: 1.6; }
+.flowchart-section { margin-bottom: 80px; }
+.divider { height: 1px; background: linear-gradient(to right, transparent, var(--border), transparent); margin: 60px 0; }
+
+/* ======== COMPARISON ======== */
+.comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.compare-card { background: var(--surface); border-radius: 14px; padding: 24px; border: 1.5px solid var(--border); }
+.compare-card.before { border-color: var(--red); }
+.compare-card.after { border-color: var(--accent-jetson); }
+.compare-label { font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; padding: 3px 10px; border-radius: 12px; display: inline-block; margin-bottom: 16px; }
+.before .compare-label { background: rgba(239,68,68,0.15); color: var(--red); }
+.after .compare-label { background: rgba(16,185,129,0.15); color: var(--accent-jetson); }
+.compare-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 0.82rem; }
+.compare-row:last-child { border-bottom: none; }
+.compare-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.before .compare-dot { background: var(--red); }
+.after .compare-dot { background: var(--accent-jetson); }
+
+/* ======== SYSTEM OVERVIEW ======== */
+.system-overview { display: grid; grid-template-columns: 1fr 120px 1fr; gap: 0; align-items: start; }
+.machine-box { background: var(--surface); border: 1.5px solid var(--border); border-radius: 16px; padding: 24px; }
+.machine-box.mac { border-color: var(--accent-mac); }
+.machine-box.jetson { border-color: var(--accent-jetson); }
+.machine-label { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; padding: 4px 12px; border-radius: 20px; display: inline-block; margin-bottom: 16px; }
+.mac .machine-label { background: rgba(245,158,11,0.15); color: var(--accent-mac); }
+.jetson .machine-label { background: rgba(16,185,129,0.15); color: var(--accent-jetson); }
+.component { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; margin-bottom: 10px; font-size: 0.85rem; display: flex; align-items: center; gap: 10px; transition: transform 0.15s, border-color 0.15s; }
+.component:hover { transform: translateX(3px); border-color: var(--accent-zmq); }
+.component .icon { width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; flex-shrink: 0; font-family: 'JetBrains Mono', monospace; }
+.icon.usb { background: rgba(245,158,11,0.2); color: var(--accent-mac); }
+.icon.zmq { background: rgba(99,102,241,0.2); color: var(--accent-zmq); }
+.icon.cam { background: rgba(16,185,129,0.2); color: var(--accent-jetson); }
+.icon.mot { background: rgba(236,72,153,0.2); color: var(--accent-data); }
+.icon.py  { background: rgba(139,92,246,0.2); color: var(--accent-vla); }
+.component .name { font-weight: 500; color: var(--text); }
+.component .detail { font-size: 0.75rem; color: var(--text-dim); }
+
+.wifi-bridge { display: flex; flex-direction: column; align-items: center; justify-content: center; padding-top: 80px; gap: 16px; }
+.wifi-icon { width: 56px; height: 56px; border-radius: 50%; background: rgba(99,102,241,0.1); border: 2px solid var(--accent-zmq); display: flex; align-items: center; justify-content: center; font-size: 1.4rem; }
+.arrow-line { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.arrow-line .port { font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: var(--accent-zmq); background: rgba(99,102,241,0.1); padding: 2px 8px; border-radius: 10px; }
+.arrow-line .dir { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: var(--text-dim); letter-spacing: 2px; }
+
+/* ======== CONTROL LOOP ======== */
+.loop-flow { display: flex; flex-direction: column; }
+.loop-step { display: grid; grid-template-columns: 140px 1fr; }
+.step-marker { display: flex; flex-direction: column; align-items: center; }
+.step-num { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 0.85rem; z-index: 2; }
+.step-num.mac-step { background: var(--accent-mac); color: #000; }
+.step-num.zmq-step { background: var(--accent-zmq); color: #fff; }
+.step-num.jetson-step { background: var(--accent-jetson); color: #000; }
+.step-num.data-step { background: var(--accent-data); color: #fff; }
+.step-line { width: 2px; flex: 1; min-height: 24px; }
+.step-line.mac-line { background: rgba(245,158,11,0.3); }
+.step-line.zmq-line { background: rgba(99,102,241,0.3); }
+.step-line.jetson-line { background: rgba(16,185,129,0.3); }
+.step-line.data-line { background: rgba(236,72,153,0.3); }
+.step-content { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; margin-bottom: 12px; }
+.step-content h4 { font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; font-weight: 600; margin-bottom: 4px; }
+.step-content p { font-size: 0.8rem; color: var(--text-dim); line-height: 1.5; }
+.step-content code { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; background: var(--surface2); padding: 1px 6px; border-radius: 4px; color: var(--accent-zmq); }
+.step-where { font-family: 'JetBrains Mono', monospace; font-size: 0.6rem; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 6px; display: inline-block; padding: 2px 8px; border-radius: 8px; }
+.step-where.mac-where { background: rgba(245,158,11,0.12); color: var(--accent-mac); }
+.step-where.zmq-where { background: rgba(99,102,241,0.12); color: var(--accent-zmq); }
+.step-where.jetson-where { background: rgba(16,185,129,0.12); color: var(--accent-jetson); }
+.step-where.data-where { background: rgba(236,72,153,0.12); color: var(--accent-data); }
+
+/* ======== DATA PIPELINE ======== */
+.data-pipeline { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.pipeline-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px; text-align: center; position: relative; transition: transform 0.2s, box-shadow 0.2s; }
+.pipeline-card:hover { transform: translateY(-4px); box-shadow: 0 8px 30px rgba(0,0,0,0.3); }
+.pipeline-card .card-icon { width: 48px; height: 48px; border-radius: 12px; margin: 0 auto 14px; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; }
+.pipeline-card h4 { font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; font-weight: 600; margin-bottom: 8px; color: var(--text-bright); }
+.pipeline-card p { font-size: 0.78rem; color: var(--text-dim); line-height: 1.5; }
+.pipeline-card .shape { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; background: var(--surface2); padding: 3px 10px; border-radius: 6px; display: inline-block; margin-top: 8px; color: var(--accent-zmq); }
+.pipeline-arrow { position: absolute; right: -22px; top: 50%; transform: translateY(-50%); font-size: 1.2rem; color: var(--accent-zmq); z-index: 3; }
+.card-icon.ci-leader { background: rgba(245,158,11,0.15); }
+.card-icon.ci-follower { background: rgba(16,185,129,0.15); }
+.card-icon.ci-camera { background: rgba(99,102,241,0.15); }
+.card-icon.ci-dataset { background: rgba(236,72,153,0.15); }
+
+.latency-bar { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
+.latency-track { flex: 1; height: 8px; background: var(--surface2); border-radius: 4px; overflow: hidden; }
+.latency-fill { height: 100%; border-radius: 4px; transition: width 1s ease; }
+.latency-fill.cmd { background: var(--accent-mac); }
+.latency-fill.cam { background: var(--accent-zmq); }
+.latency-label { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: var(--text-dim); min-width: 100px; }
+.latency-value { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; font-weight: 600; color: var(--text-bright); min-width: 60px; text-align: right; }
+
+@media (max-width: 900px) {
+  .system-overview { grid-template-columns: 1fr; gap: 24px; }
+  .wifi-bridge { flex-direction: row; padding-top: 0; }
+  .data-pipeline { grid-template-columns: 1fr 1fr; }
+  .comparison { grid-template-columns: 1fr; }
+  .loop-step { grid-template-columns: 80px 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>XLeRobot Bimanual WiFi Teleop</h1>
+<p class="subtitle">How two SO101 leader arms on a MacBook control two follower arms on a Jetson AGX Orin over WiFi</p>
+
+<!-- ============== FLOWCHART 1: BEFORE vs AFTER ============== -->
+<div class="flowchart-section">
+<p class="section-label">Flowchart 1</p>
+<h2 class="section-title">Original XLeRobot vs Our Fork</h2>
+<p class="section-desc">What the system looked like originally and what we changed to enable remote bimanual WiFi teleop with dataset recording.</p>
+<div class="comparison">
+  <div class="compare-card before">
+    <span class="compare-label">Original XLeRobot</span>
+    <div class="compare-row"><span class="compare-dot"></span> All 17 motors on one machine (local USB only)</div>
+    <div class="compare-row"><span class="compare-dot"></span> Leader input: VR headset / keyboard / gamepad</div>
+    <div class="compare-row"><span class="compare-dot"></span> 3 cameras: front + 2 wrist (all local)</div>
+    <div class="compare-row"><span class="compare-dot"></span> Head motors (2) + base wheels (3) always required</div>
+    <div class="compare-row"><span class="compare-dot"></span> ZMQ host/client existed but only for base robot</div>
+    <div class="compare-row"><span class="compare-dot"></span> No dataset recording during teleop</div>
+    <div class="compare-row"><span class="compare-dot"></span> Relative imports: <code style="font-size:0.7rem">from ..robot import Robot</code></div>
+  </div>
+  <div class="compare-card after">
+    <span class="compare-label">Our Fork (Working Now)</span>
+    <div class="compare-row"><span class="compare-dot"></span> Split across WiFi: leaders on Mac, followers on Jetson</div>
+    <div class="compare-row"><span class="compare-dot"></span> Leader input: 2x physical SO101 arms via USB serial</div>
+    <div class="compare-row"><span class="compare-dot"></span> 1 camera: front only (single-camera mode)</div>
+    <div class="compare-row"><span class="compare-dot"></span> Head/base motors optional (graceful skip if absent)</div>
+    <div class="compare-row"><span class="compare-dot"></span> ZMQ extended for bimanual 12-DOF + camera streaming</div>
+    <div class="compare-row"><span class="compare-dot"></span> LeRobot dataset recording built into teleop client</div>
+    <div class="compare-row"><span class="compare-dot"></span> Absolute imports: <code style="font-size:0.7rem">from lerobot.robots.robot</code></div>
+  </div>
+</div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ============== FLOWCHART 2: SYSTEM ARCHITECTURE ============== -->
+<div class="flowchart-section">
+<p class="section-label">Flowchart 2</p>
+<h2 class="section-title">System Architecture</h2>
+<p class="section-desc">Two machines on the same WiFi. Mac reads leader arms and sends joint commands via ZMQ; Jetson drives follower arms and streams camera + state back.</p>
+<div class="system-overview">
+  <div class="machine-box mac">
+    <span class="machine-label">MacBook Pro</span>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:0.7rem;color:var(--text-dim);margin-bottom:14px">9_so101_bimanual_leader_wifi_teleop.py</div>
+    <div class="component"><div class="icon usb">L1</div><div><div class="name">SO101 Leader Left</div><div class="detail">/dev/tty.usbmodem5A460815221</div></div></div>
+    <div class="component"><div class="icon usb">L2</div><div><div class="name">SO101 Leader Right</div><div class="detail">/dev/tty.usbmodem5A460829761</div></div></div>
+    <div class="component"><div class="icon py">Py</div><div><div class="name">read_leaders() @ 30Hz</div><div class="detail">Reads 6+6 joints, maps to xlerobot keys</div></div></div>
+    <div class="component"><div class="icon py">SM</div><div><div class="name">smooth_action()</div><div class="detail">EMA filter (&alpha;=0.35) + deadband</div></div></div>
+    <div class="component"><div class="icon zmq">TX</div><div><div class="name">ZMQ PUSH &rarr; port 5555</div><div class="detail">12 arm joints + head/base neutral</div></div></div>
+    <div class="component"><div class="icon zmq">RX</div><div><div class="name">ZMQ PULL &larr; port 5556</div><div class="detail">Joint state + JPEG camera frame</div></div></div>
+    <div class="component"><div class="icon cam">CV</div><div><div class="name">OpenCV Display</div><div class="detail">Front camera feed + REC/VLA overlay</div></div></div>
+    <div class="component"><div class="icon mot">DS</div><div><div class="name">LeRobot Dataset Recorder</div><div class="detail">Press R to record episodes (background thread)</div></div></div>
+  </div>
+
+  <div class="wifi-bridge">
+    <div class="arrow-line"><span class="port">:5555</span><span class="dir">&rarr;&rarr;&rarr;</span><span style="font-size:0.65rem;color:var(--text-dim)">commands</span></div>
+    <div class="wifi-icon">&#128225;</div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:0.65rem;color:var(--accent-zmq)">WiFi LAN</div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:0.6rem;color:var(--text-dim)">~5ms latency</div>
+    <div class="arrow-line"><span style="font-size:0.65rem;color:var(--text-dim)">observations</span><span class="dir">&larr;&larr;&larr;</span><span class="port">:5556</span></div>
+  </div>
+
+  <div class="machine-box jetson">
+    <span class="machine-label">Jetson AGX Orin 64GB</span>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:0.7rem;color:var(--text-dim);margin-bottom:14px">xlerobot_host.py</div>
+    <div class="component"><div class="icon zmq">RX</div><div><div class="name">ZMQ PULL &larr; port 5555</div><div class="detail">Receives joint commands from Mac</div></div></div>
+    <div class="component"><div class="icon py">Py</div><div><div class="name">robot.send_action()</div><div class="detail">Writes Goal_Position to follower servos</div></div></div>
+    <div class="component"><div class="icon mot">F1</div><div><div class="name">SO101 Follower Left</div><div class="detail">Bus1 /dev/ttyACM0 &mdash; 6 Feetech STS3215</div></div></div>
+    <div class="component"><div class="icon mot">F2</div><div><div class="name">SO101 Follower Right</div><div class="detail">Bus2 /dev/ttyACM1 &mdash; 6 Feetech STS3215</div></div></div>
+    <div class="component"><div class="icon cam">&#128247;</div><div><div class="name">Front Camera</div><div class="detail">/dev/video0 &mdash; 640&times;480 @ 30fps</div></div></div>
+    <div class="component"><div class="icon py">Py</div><div><div class="name">robot.get_observation()</div><div class="detail">Reads 12 joints + captures camera frame</div></div></div>
+    <div class="component"><div class="icon zmq">TX</div><div><div class="name">ZMQ PUSH &rarr; port 5556</div><div class="detail">JSON: joint state + base64 JPEG</div></div></div>
+    <div class="component"><div class="icon py">WD</div><div><div class="name">Watchdog (500ms)</div><div class="detail">Stops base if no commands received</div></div></div>
+  </div>
+</div>
+
+<div style="margin-top:32px">
+  <div style="font-family:'JetBrains Mono',monospace;font-size:0.75rem;color:var(--text-dim);margin-bottom:12px">MEASURED LATENCY (WiFi LAN)</div>
+  <div class="latency-bar"><span class="latency-label">Joint commands</span><div class="latency-track"><div class="latency-fill cmd" style="width:8%"></div></div><span class="latency-value">~6ms</span></div>
+  <div class="latency-bar"><span class="latency-label">Camera frame</span><div class="latency-track"><div class="latency-fill cam" style="width:20%"></div></div><span class="latency-value">~15-25ms</span></div>
+</div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ============== FLOWCHART 3: CONTROL LOOP ============== -->
+<div class="flowchart-section">
+<p class="section-label">Flowchart 3</p>
+<h2 class="section-title">Single Control Loop Iteration (30Hz)</h2>
+<p class="section-desc">What happens every 33ms in one cycle of the teleop loop &mdash; from reading leader arms to displaying the camera feed and recording data.</p>
+<div class="loop-flow">
+
+  <div class="loop-step"><div class="step-marker"><div class="step-num mac-step">1</div><div class="step-line mac-line"></div></div>
+    <div class="step-content"><span class="step-where mac-where">MacBook</span><h4 style="color:var(--accent-mac)">Read Leader Arms</h4><p><code>read_leaders()</code> calls <code>SO101Leader.get_action()</code> on both USB serial buses. Returns 12 raw joint positions (6 left + 6 right).</p></div></div>
+
+  <div class="loop-step"><div class="step-marker"><div class="step-num mac-step">2</div><div class="step-line mac-line"></div></div>
+    <div class="step-content"><span class="step-where mac-where">MacBook</span><h4 style="color:var(--accent-mac)">Smooth + Deadband Filter</h4><p><code>smooth_action()</code> applies EMA smoothing (&alpha;=0.35) and deadband filtering (0.25 joints, 0.4 grippers) to eliminate servo jitter.</p></div></div>
+
+  <div class="loop-step"><div class="step-marker"><div class="step-num zmq-step">3</div><div class="step-line zmq-line"></div></div>
+    <div class="step-content"><span class="step-where zmq-where">WiFi &rarr; ZMQ</span><h4 style="color:var(--accent-zmq)">Send Action Over ZMQ</h4><p><code>robot.send_action()</code> serializes 17 values as JSON (12 arm + 2 head + 3 base, head/base zeroed) and pushes to Jetson via <code>ZMQ PUSH :5555</code>. ~500 bytes per message.</p></div></div>
+
+  <div class="loop-step"><div class="step-marker"><div class="step-num jetson-step">4</div><div class="step-line jetson-line"></div></div>
+    <div class="step-content"><span class="step-where jetson-where">Jetson</span><h4 style="color:var(--accent-jetson)">Drive Follower Arms</h4><p><code>xlerobot_host.py</code> receives the JSON, calls <code>robot.send_action()</code> which writes <code>Goal_Position</code> to left arm (Bus1) and right arm (Bus2) via Feetech serial protocol.</p></div></div>
+
+  <div class="loop-step"><div class="step-marker"><div class="step-num jetson-step">5</div><div class="step-line jetson-line"></div></div>
+    <div class="step-content"><span class="step-where jetson-where">Jetson</span><h4 style="color:var(--accent-jetson)">Read Observation + Camera</h4><p><code>robot.get_observation()</code> reads <code>Present_Position</code> from both follower arms (12 joints), captures front camera, JPEG-encodes (quality 90), base64-encodes, bundles into JSON.</p></div></div>
+
+  <div class="loop-step"><div class="step-marker"><div class="step-num zmq-step">6</div><div class="step-line zmq-line"></div></div>
+    <div class="step-content"><span class="step-where zmq-where">WiFi &larr; ZMQ</span><h4 style="color:var(--accent-zmq)">Stream Observation Back</h4><p>Jetson pushes the observation JSON (~30-50KB with JPEG) via <code>ZMQ PUSH :5556</code>. Mac receives with <code>CONFLATE=1</code> &mdash; always gets latest frame, drops old ones.</p></div></div>
+
+  <div class="loop-step"><div class="step-marker"><div class="step-num mac-step">7</div><div class="step-line mac-line"></div></div>
+    <div class="step-content"><span class="step-where mac-where">MacBook</span><h4 style="color:var(--accent-mac)">Display Camera + Check Keys</h4><p>Decodes base64 JPEG, displays in OpenCV window with REC/VLA overlay. Checks keyboard: <code>R</code> toggles recording, <code>V</code> toggles VLA mode, <code>Q</code> quits.</p></div></div>
+
+  <div class="loop-step"><div class="step-marker"><div class="step-num data-step">8</div></div>
+    <div class="step-content"><span class="step-where data-where">MacBook (background thread)</span><h4 style="color:var(--accent-data)">Record &amp; Save Episode</h4><p>If recording: builds LeRobot frame with <code>action</code> (12-D leader), <code>observation.state</code> (12-D follower), <code>observation.images.front</code> (camera). After 300 frames, <code>dataset.save_episode()</code> writes to disk. Optionally pushes to HuggingFace Hub.</p></div></div>
+
+</div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ============== DATA FORMAT ============== -->
+<div class="flowchart-section">
+<p class="section-label">Data Output</p>
+<h2 class="section-title">What Gets Recorded (LeRobot Format)</h2>
+<p class="section-desc">Each timestep at 30fps produces one frame with these fields, directly compatible with VLA model fine-tuning.</p>
+<div class="data-pipeline">
+  <div class="pipeline-card" style="position:relative"><div class="card-icon ci-leader">&#129294;</div><h4>action</h4><p>12 leader joint positions<br>(what you commanded)</p><span class="shape">(12,) float32</span><span class="pipeline-arrow">&rarr;</span></div>
+  <div class="pipeline-card" style="position:relative"><div class="card-icon ci-follower">&#129302;</div><h4>observation.state</h4><p>12 follower joint positions<br>(what robot actually did)</p><span class="shape">(12,) float32</span><span class="pipeline-arrow">&rarr;</span></div>
+  <div class="pipeline-card" style="position:relative"><div class="card-icon ci-camera">&#128247;</div><h4>observation.images.front</h4><p>Front camera frame<br>(streamed from Jetson)</p><span class="shape">(480, 640, 3) uint8</span><span class="pipeline-arrow">&rarr;</span></div>
+  <div class="pipeline-card"><div class="card-icon ci-dataset">&#128190;</div><h4>LeRobot Dataset</h4><p>Saved to disk, optionally pushed to HuggingFace Hub</p><span class="shape">30fps &middot; 300 steps/ep</span></div>
+</div>
+<div style="margin-top:24px;text-align:center">
+  <div style="display:inline-flex;gap:24px;flex-wrap:wrap;justify-content:center">
+    <div style="font-family:'JetBrains Mono',monospace;font-size:0.7rem;padding:6px 16px;border-radius:8px;background:rgba(139,92,246,0.1);color:var(--accent-vla);border:1px solid rgba(139,92,246,0.2)">Compatible: SmolVLA</div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:0.7rem;padding:6px 16px;border-radius:8px;background:rgba(139,92,246,0.1);color:var(--accent-vla);border:1px solid rgba(139,92,246,0.2)">Compatible: pi0 / pi0.5</div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:0.7rem;padding:6px 16px;border-radius:8px;background:rgba(139,92,246,0.1);color:var(--accent-vla);border:1px solid rgba(139,92,246,0.2)">Compatible: GROOT N1.5</div>
+  </div>
+</div>
+</div>
+
+</div>
+</body>
+</html>
