@@ -4,7 +4,7 @@ Standalone calibration for XLeRobot head motors (IDs 7, 8) on Bus 1.
 
 Run this ON THE JETSON after you've:
   1. Changed head_motor_1 → ID 7 and head_motor_2 → ID 8 (setup_motor_ids.py)
-  2. Connected both head motors to the LEFT ARM chain (Bus 1 / /dev/ttyACM0)
+  2. Connected both head motors to the LEFT ARM chain (Bus 1 / /dev/ttyACM1)
 
 This script:
   - Connects to Bus 1 with ONLY the head motors
@@ -16,7 +16,7 @@ Usage (on Jetson):
   python examples/calibrate_head_motors.py
 
   Or with a custom port:
-  python examples/calibrate_head_motors.py --port /dev/ttyACM0
+  python examples/calibrate_head_motors.py --port /dev/ttyACM1
 """
 
 import argparse
@@ -163,8 +163,8 @@ def verify_motors(port: str):
 def main():
     parser = argparse.ArgumentParser(description="Calibrate XLeRobot head motors")
     parser.add_argument(
-        "--port", default="/dev/ttyACM0",
-        help="Serial port for Bus 1 (default: /dev/ttyACM0)"
+        "--port", default="/dev/ttyACM1",
+        help="Serial port for Bus 1 / left arm chain (default: /dev/ttyACM1)"
     )
     parser.add_argument(
         "--verify", action="store_true",

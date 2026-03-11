@@ -33,11 +33,11 @@ from lerobot.motors.feetech import FeetechMotorsBus
 
 
 XLEROBOT_MOTOR_MAP = {
-    "Bus 1 (left arm + head) — /dev/ttyACM0 on Jetson": {
+    "Bus 1 (left arm + head) — /dev/ttyACM1 on Jetson": {
         "head_motor_1": 7,
         "head_motor_2": 8,
     },
-    "Bus 2 (right arm + base) — /dev/ttyACM1 on Jetson": {
+    "Bus 2 (right arm + base) — /dev/ttyACM0 on Jetson": {
         "base_left_wheel": 7,
         "base_back_wheel": 8,
         "base_right_wheel": 9,
