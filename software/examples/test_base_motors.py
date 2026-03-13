@@ -40,10 +40,9 @@ MOTORS = {
 }
 
 SPEED_LEVELS = [
-    {"xy": 0.15, "theta": 45, "label": "SLOW"},
-    {"xy": 0.30, "theta": 90, "label": "MEDIUM"},
-    {"xy": 0.50, "theta": 140, "label": "FAST"},
-    {"xy": 0.75, "theta": 200, "label": "TURBO"},
+    {"xy": 0.30, "theta": 90, "label": "SLOW"},
+    {"xy": 0.60, "theta": 180, "label": "MEDIUM"},
+    {"xy": 1.00, "theta": 300, "label": "FAST"},
 ]
 
 
@@ -55,7 +54,7 @@ def degps_to_raw(degps: float) -> int:
 
 def body_to_wheel_raw(
     x: float, y: float, theta: float,
-    wheel_radius: float = 0.05, base_radius: float = 0.125, max_raw: int = 3000,
+    wheel_radius: float = 0.05, base_radius: float = 0.125, max_raw: int = 10000,
 ) -> dict:
     theta_rad = theta * (np.pi / 180.0)
     velocity = np.array([x, y, theta_rad])

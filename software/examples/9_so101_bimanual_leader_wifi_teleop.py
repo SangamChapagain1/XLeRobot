@@ -99,13 +99,9 @@ ACTION_SMOOTHING_ALPHA = 0.35
 JOINT_DEADBAND = 0.25
 GRIPPER_DEADBAND = 0.4
 
-# Base control speed levels (keyboard-driven, omnidirectional)
-BASE_SPEED_LEVELS = [
-    {"xy": 0.15, "theta": 45, "label": "SLOW"},
-    {"xy": 0.30, "theta": 90, "label": "MEDIUM"},
-    {"xy": 0.50, "theta": 140, "label": "FAST"},
-    {"xy": 0.75, "theta": 200, "label": "TURBO"},
-]
+# Fixed base speed — one speed, no fiddling
+BASE_XY_SPEED = 1.0     # m/s linear
+BASE_THETA_SPEED = 300   # deg/s rotation
 
 # Intervention threshold for VLA mode:
 # if any leader joint moves more than this (degrees) in one step, human override activates
@@ -150,47 +146,20 @@ BIMANUAL_JOINT_ORDER = [
 # ===========================================================================
 
 class KeyboardBaseController:
-    """Tracks base velocity from keyboard presses captured via cv2.waitKey().
+    """Simple fixed-speed base control from cv2.waitKey().
     
-    Keys (active while held; OpenCV only sees one key per waitKey call,
-    so tap repeatedly for continuous motion):
-        i/k  = forward / backward
-        j/l  = strafe left / right
-        u/o  = rotate left / right
-        n/m  = speed up / down
+    Keys:  i/k = fwd/bwd,  j/l = left/right,  u/o = rotate
     """
 
-    def __init__(self):
-        self.speed_idx = 0
-
     def process_key(self, key: int) -> dict:
-        """Return base velocity dict from a cv2.waitKey result (masked to 0xFF)."""
-        x_cmd = 0.0
-        y_cmd = 0.0
-        theta_cmd = 0.0
-
-        if key == ord("n"):
-            self.speed_idx = min(self.speed_idx + 1, len(BASE_SPEED_LEVELS) - 1)
-            logger.info(f"Base speed: {BASE_SPEED_LEVELS[self.speed_idx]['label']}")
-        elif key == ord("m"):
-            self.speed_idx = max(self.speed_idx - 1, 0)
-            logger.info(f"Base speed: {BASE_SPEED_LEVELS[self.speed_idx]['label']}")
-
-        spd = BASE_SPEED_LEVELS[self.speed_idx]
-        if key == ord("i"):
-            x_cmd = spd["xy"]
-        elif key == ord("k"):
-            x_cmd = -spd["xy"]
-        elif key == ord("j"):
-            y_cmd = spd["xy"]
-        elif key == ord("l"):
-            y_cmd = -spd["xy"]
-        elif key == ord("u"):
-            theta_cmd = spd["theta"]
-        elif key == ord("o"):
-            theta_cmd = -spd["theta"]
-
-        return {"x.vel": x_cmd, "y.vel": y_cmd, "theta.vel": theta_cmd}
+        x, y, th = 0.0, 0.0, 0.0
+        if key == ord("i"):   x = BASE_XY_SPEED
+        elif key == ord("k"): x = -BASE_XY_SPEED
+        elif key == ord("j"): y = BASE_XY_SPEED
+        elif key == ord("l"): y = -BASE_XY_SPEED
+        elif key == ord("u"): th = BASE_THETA_SPEED
+        elif key == ord("o"): th = -BASE_THETA_SPEED
+        return {"x.vel": x, "y.vel": y, "theta.vel": th}
 
 
 # ===========================================================================
