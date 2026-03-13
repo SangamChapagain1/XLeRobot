@@ -164,13 +164,25 @@ class XLerobot(Robot):
 
     @property
     def is_connected(self) -> bool:
-        return self.bus1.is_connected and self.bus2.is_connected and all(
-            cam.is_connected for cam in self.cameras.values()
-        )
+        buses_ok = self.bus1.is_connected or self.bus2.is_connected
+        cams_ok = all(cam.is_connected for cam in self.cameras.values()) if self.cameras else True
+        return buses_ok and cams_ok
+
+    def _bus_has_motors(self, bus) -> bool:
+        """Quick probe: try to read one motor on the bus to see if anything responds."""
+        try:
+            first_motor = next(iter(bus.motors))
+            bus._read(5, 1, bus.motors[first_motor].id)
+            return True
+        except Exception:
+            return False
 
     def connect(self, calibrate: bool = True) -> None:
         if self.is_connected:
             raise DeviceAlreadyConnectedError(f"{self} already connected")
+
+        self._bus1_alive = False
+        self._bus2_alive = False
 
         for label, bus in [("bus1", self.bus1), ("bus2", self.bus2)]:
             try:
@@ -186,31 +198,45 @@ class XLerobot(Robot):
                         except Exception:
                             pass
                 bus.connect(handshake=False)
-        
-        # Check if calibration file exists and ask user if they want to restore it
+
+        self._bus1_alive = self._bus_has_motors(self.bus1)
+        self._bus2_alive = self._bus_has_motors(self.bus2)
+        logger.info(f"Bus status: bus1={'OK' if self._bus1_alive else 'NO MOTORS'}, "
+                     f"bus2={'OK' if self._bus2_alive else 'NO MOTORS'}")
+
+        if not self._bus1_alive and not self._bus2_alive:
+            raise ConnectionError("Neither bus has responding motors. Check power and wiring.")
+
+        # Restore calibration from file
         if self.calibration_fpath.is_file():
             logger.info(f"Calibration file found at {self.calibration_fpath}")
             user_input = input(
-                f"Press ENTER to restore calibration from file, or type 'c' and press ENTER to run manual calibration: "
+                "Press ENTER to restore calibration from file, or type 'c' and press ENTER to run manual calibration: "
             )
             if user_input.strip().lower() != "c":
                 logger.info("Attempting to restore calibration from file...")
-                try:
-                    cal1 = {k: v for k, v in self.calibration.items() if k in self.bus1.motors and v is not None}
-                    cal2 = {k: v for k, v in self.calibration.items() if k in self.bus2.motors and v is not None}
-                    self.bus1.calibration = cal1
-                    self.bus2.calibration = cal2
-                    logger.info("Calibration data loaded into bus memory successfully!")
-                    
-                    self.bus1.write_calibration(cal1)
-                    self.bus2.write_calibration(cal2)
-                    logger.info("Calibration restored successfully from file!")
-                    
-                except Exception as e:
-                    logger.warning(f"Failed to restore calibration from file: {e}")
-                    if calibrate:
-                        logger.info("Proceeding with manual calibration...")
-                        self.calibrate()
+                cal1 = {k: v for k, v in self.calibration.items() if k in self.bus1.motors and v is not None}
+                cal2 = {k: v for k, v in self.calibration.items() if k in self.bus2.motors and v is not None}
+                self.bus1.calibration = cal1
+                self.bus2.calibration = cal2
+
+                if self._bus1_alive and cal1:
+                    try:
+                        self.bus1.write_calibration(cal1)
+                        logger.info("bus1 calibration restored.")
+                    except Exception as e:
+                        logger.warning(f"bus1 calibration write failed: {e}")
+                elif not self._bus1_alive:
+                    logger.warning("bus1 has no responding motors — skipping calibration write.")
+
+                if self._bus2_alive and cal2:
+                    try:
+                        self.bus2.write_calibration(cal2)
+                        logger.info("bus2 calibration restored.")
+                    except Exception as e:
+                        logger.warning(f"bus2 calibration write failed: {e}")
+                elif not self._bus2_alive:
+                    logger.warning("bus2 has no responding motors — skipping calibration write.")
             else:
                 logger.info("User chose manual calibration...")
                 if calibrate:
@@ -305,49 +331,36 @@ class XLerobot(Robot):
         
 
     def configure(self):
-        # Set-up arm actuators (position mode)
-        # We assume that at connection time, arm is in a rest position,
-        # and torque can be safely disabled to run calibration
-        
-        # bus 1
-        self.bus1.disable_torque()
-        self.bus1.configure_motors()
+        if self._bus1_alive:
+            self.bus1.disable_torque()
+            self.bus1.configure_motors()
+            for name in self.left_arm_motors:
+                self.bus1.write("Operating_Mode", name, OperatingMode.POSITION.value)
+                self.bus1.write("P_Coefficient", name, 16)
+                self.bus1.write("I_Coefficient", name, 0)
+                self.bus1.write("D_Coefficient", name, 43)
+            for name in self.head_motors:
+                self.bus1.write("Operating_Mode", name, OperatingMode.POSITION.value)
+                self.bus1.write("P_Coefficient", name, 16)
+                self.bus1.write("I_Coefficient", name, 0)
+                self.bus1.write("D_Coefficient", name, 43)
+            self.bus1.enable_torque()
+        else:
+            logger.warning("bus1 has no responding motors — skipping configure.")
 
-        # bus 2
-        self.bus2.disable_torque()
-        self.bus2.configure_motors()
-        
-        
-        for name in self.left_arm_motors:
-            self.bus1.write("Operating_Mode", name, OperatingMode.POSITION.value)
-            # Set P_Coefficient to lower value to avoid shakiness (Default is 32)
-            self.bus1.write("P_Coefficient", name, 16)
-            # Set I_Coefficient and D_Coefficient to default value 0 and 32
-            self.bus1.write("I_Coefficient", name, 0)
-            self.bus1.write("D_Coefficient", name, 43)
-        
-        for name in self.head_motors:
-            self.bus1.write("Operating_Mode", name, OperatingMode.POSITION.value)
-            # Set P_Coefficient to lower value to avoid shakiness (Default is 32)
-            self.bus1.write("P_Coefficient", name, 16)
-            # Set I_Coefficient and D_Coefficient to default value 0 and 32
-            self.bus1.write("I_Coefficient", name, 0)
-            self.bus1.write("D_Coefficient", name, 43)
-        
-        for name in self.right_arm_motors:
-            self.bus2.write("Operating_Mode", name, OperatingMode.POSITION.value)
-            # Set P_Coefficient to lower value to avoid shakiness (Default is 32)
-            self.bus2.write("P_Coefficient", name, 16)
-            # Set I_Coefficient and D_Coefficient to default value 0 and 32
-            self.bus2.write("I_Coefficient", name, 0)
-            self.bus2.write("D_Coefficient", name, 43)
-        
-        for name in self.base_motors:
-            self.bus2.write("Operating_Mode", name, OperatingMode.VELOCITY.value)
-        
-        
-        self.bus1.enable_torque()
-        self.bus2.enable_torque()
+        if self._bus2_alive:
+            self.bus2.disable_torque()
+            self.bus2.configure_motors()
+            for name in self.right_arm_motors:
+                self.bus2.write("Operating_Mode", name, OperatingMode.POSITION.value)
+                self.bus2.write("P_Coefficient", name, 16)
+                self.bus2.write("I_Coefficient", name, 0)
+                self.bus2.write("D_Coefficient", name, 43)
+            for name in self.base_motors:
+                self.bus2.write("Operating_Mode", name, OperatingMode.VELOCITY.value)
+            self.bus2.enable_torque()
+        else:
+            logger.warning("bus2 has no responding motors — skipping configure.")
         
 
     def setup_motors(self) -> None:
@@ -535,33 +548,38 @@ class XLerobot(Robot):
         if not self.is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
-        # Read actuators position for arm and vel for base
         start = time.perf_counter()
-        left_arm_pos = self.bus1.sync_read("Present_Position", self.left_arm_motors)
-        right_arm_pos = self.bus2.sync_read("Present_Position", self.right_arm_motors)
-        head_pos = self.bus1.sync_read("Present_Position", self.head_motors) if self.head_motors else {}
-        if self.base_motors:
-            base_wheel_vel = self.bus2.sync_read("Present_Velocity", self.base_motors)
-            base_vel = self._wheel_raw_to_body(
-                base_wheel_vel["base_left_wheel"],
-                base_wheel_vel["base_back_wheel"],
-                base_wheel_vel["base_right_wheel"],
-            )
+
+        if self._bus1_alive:
+            left_arm_pos = self.bus1.sync_read("Present_Position", self.left_arm_motors)
+            head_pos = self.bus1.sync_read("Present_Position", self.head_motors) if self.head_motors else {}
         else:
+            left_arm_pos = dict.fromkeys(self.left_arm_motors, 0.0)
+            head_pos = {}
+
+        if self._bus2_alive:
+            right_arm_pos = self.bus2.sync_read("Present_Position", self.right_arm_motors)
+            if self.base_motors:
+                base_wheel_vel = self.bus2.sync_read("Present_Velocity", self.base_motors)
+                base_vel = self._wheel_raw_to_body(
+                    base_wheel_vel["base_left_wheel"],
+                    base_wheel_vel["base_back_wheel"],
+                    base_wheel_vel["base_right_wheel"],
+                )
+            else:
+                base_vel = {"x.vel": 0.0, "y.vel": 0.0, "theta.vel": 0.0}
+        else:
+            right_arm_pos = dict.fromkeys(self.right_arm_motors, 0.0)
             base_vel = {"x.vel": 0.0, "y.vel": 0.0, "theta.vel": 0.0}
-        
+
         left_arm_state = {f"{k}.pos": v for k, v in left_arm_pos.items()}
         right_arm_state = {f"{k}.pos": v for k, v in right_arm_pos.items()}
         head_state = {f"{k}.pos": v for k, v in head_pos.items()}
         dt_ms = (time.perf_counter() - start) * 1e3
         logger.debug(f"{self} read state: {dt_ms:.1f}ms")
 
-        # Capture images from cameras
         camera_obs = self.get_camera_observation()
-
-        # Combine all observations
         obs_dict = {**left_arm_state, **right_arm_state, **head_state, **base_vel, **camera_obs}
-
         return obs_dict
     
     def get_camera_observation(self):
@@ -647,15 +665,16 @@ class XLerobot(Robot):
         right_arm_pos_raw = {k.replace(".pos", ""): v for k, v in right_arm_pos.items()}
         head_pos_raw = {k.replace(".pos", ""): v for k, v in head_pos.items()}
         
-        # Only sync_write if there are motors to write to
-        if left_arm_pos_raw:
-            self.bus1.sync_write("Goal_Position", left_arm_pos_raw)
-        if right_arm_pos_raw:
-            self.bus2.sync_write("Goal_Position", right_arm_pos_raw)
-        if head_pos_raw:
-            self.bus1.sync_write("Goal_Position", head_pos_raw)
-        if base_wheel_goal_vel:
-            self.bus2.sync_write("Goal_Velocity", base_wheel_goal_vel)
+        if self._bus1_alive:
+            if left_arm_pos_raw:
+                self.bus1.sync_write("Goal_Position", left_arm_pos_raw)
+            if head_pos_raw:
+                self.bus1.sync_write("Goal_Position", head_pos_raw)
+        if self._bus2_alive:
+            if right_arm_pos_raw:
+                self.bus2.sync_write("Goal_Position", right_arm_pos_raw)
+            if base_wheel_goal_vel:
+                self.bus2.sync_write("Goal_Velocity", base_wheel_goal_vel)
         return {
             **left_arm_pos,
             **right_arm_pos,
@@ -664,24 +683,29 @@ class XLerobot(Robot):
         }
 
     def stop_base(self):
-        if not self.base_motors:
+        if not self.base_motors or not getattr(self, '_bus2_alive', False):
             return
-        self.bus2.sync_write("Goal_Velocity", dict.fromkeys(self.base_motors, 0), num_retry=5)
-        logger.info("Base motors stopped")
+        try:
+            self.bus2.sync_write("Goal_Velocity", dict.fromkeys(self.base_motors, 0), num_retry=5)
+            logger.info("Base motors stopped")
+        except Exception as e:
+            logger.warning(f"Failed to stop base: {e}")
 
     def disconnect(self):
         if not self.is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
         self.stop_base()
-        try:
-            self.bus1.disconnect(self.config.disable_torque_on_disconnect)
-        except Exception as e:
-            logger.warning(f"bus1 disconnect warning: {e}")
-        try:
-            self.bus2.disconnect(self.config.disable_torque_on_disconnect)
-        except Exception as e:
-            logger.warning(f"bus2 disconnect warning: {e}")
+        for label, bus in [("bus1", self.bus1), ("bus2", self.bus2)]:
+            try:
+                if bus.is_connected:
+                    bus.disconnect(self.config.disable_torque_on_disconnect)
+            except Exception as e:
+                logger.warning(f"{label} disconnect warning: {e}")
+                try:
+                    bus.port_handler.closePort()
+                except Exception:
+                    pass
         for cam in self.cameras.values():
             cam.disconnect()
 
