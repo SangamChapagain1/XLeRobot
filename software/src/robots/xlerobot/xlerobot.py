@@ -94,9 +94,13 @@ class XLerobot(Robot):
                 "right_arm_wrist_roll": self.calibration.get("right_arm_wrist_roll"),
                 "right_arm_gripper": self.calibration.get("right_arm_gripper"),
             }
+            for wname in ("base_left_wheel", "base_back_wheel", "base_right_wheel"):
+                cal = self.calibration.get(wname)
+                if cal is not None:
+                    calibration2[wname] = cal
         else:
             calibration2 = self.calibration
-        self.bus2= FeetechMotorsBus(
+        self.bus2 = FeetechMotorsBus(
             port=self.config.port2,
             motors={
                 # right arm
@@ -106,6 +110,10 @@ class XLerobot(Robot):
                 "right_arm_wrist_flex": Motor(4, "sts3215", norm_mode_body),
                 "right_arm_wrist_roll": Motor(5, "sts3215", norm_mode_body),
                 "right_arm_gripper": Motor(6, "sts3215", MotorNormMode.RANGE_0_100),
+                # base wheels (3-wheel omnidirectional)
+                "base_left_wheel": Motor(7, "sts3215", MotorNormMode.RANGE_M100_100),
+                "base_back_wheel": Motor(8, "sts3215", MotorNormMode.RANGE_M100_100),
+                "base_right_wheel": Motor(9, "sts3215", MotorNormMode.RANGE_M100_100),
             },
             calibration=calibration2,
         )

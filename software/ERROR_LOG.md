@@ -36,6 +36,23 @@ Use this file to track reproducible errors and fixes across Jetson and Mac.
 - **Fix**: Increased camera warmup in `config_xlerobot.py`:
   - `warmup_s=4`
 
+## 2026-03-11 - Head/neck motors not connected (hardware fault)
+- **Context**: Motor ID setup for head_motor_1 (ID 7) and head_motor_2 (ID 8) on Bus 1.
+- **Error**: One of the neck/head STS3215 motors is faulty — does not respond on the bus.
+- **Status**: SKIPPED. Head motors are not connected. Code gracefully handles empty
+  `self.head_motors` list. Calibration file has `null` for head motor entries.
+- **Impact**: Head pan/tilt is disabled. Teleop sends `head_motor_1.pos: 0.0` and
+  `head_motor_2.pos: 0.0` but the host ignores them since no head motors are registered.
+- **TODO**: Replace faulty motor and re-run `setup_motor_ids.py` on Bus 1 (/dev/ttyACM1).
+
+## 2026-03-11 - Base motors (IDs 7, 8, 9) were missing from bus2 definition
+- **Context**: `xlerobot.py` bus2 only had right arm motors (IDs 1-6). Base wheel motors
+  (base_left_wheel=7, base_back_wheel=8, base_right_wheel=9) were never added.
+- **Error**: `self.base_motors` was always an empty list. All omnidirectional kinematics
+  code existed but was never executed.
+- **Fix**: Added base motor definitions to bus2 in `xlerobot.py`. Updated calibration
+  file with wheel motor entries (full-turn range 0-4095, homing_offset=0).
+
 ## Log file locations
 - Jetson host runtime log: `software/logs/xlerobot_host.log`
 - Mac teleop runtime log: `software/logs/xlerobot_teleop.log`

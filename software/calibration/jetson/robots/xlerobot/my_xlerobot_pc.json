@@ -43,6 +43,7 @@
     },
     "head_motor_1": null,
     "head_motor_2": null,
+    "_note_head_motors": "Head motors not connected (faulty motor). Skipped for now.",
     "right_arm_shoulder_pan": {
         "id": 1,
         "drive_mode": 0,
@@ -85,7 +86,25 @@
         "range_min": 2043,
         "range_max": 3512
     },
-    "base_left_wheel": null,
-    "base_back_wheel": null,
-    "base_right_wheel": null
+    "base_left_wheel": {
+        "id": 7,
+        "drive_mode": 0,
+        "homing_offset": 0,
+        "range_min": 0,
+        "range_max": 4095
+    },
+    "base_back_wheel": {
+        "id": 8,
+        "drive_mode": 0,
+        "homing_offset": 0,
+        "range_min": 0,
+        "range_max": 4095
+    },
+    "base_right_wheel": {
+        "id": 9,
+        "drive_mode": 0,
+        "homing_offset": 0,
+        "range_min": 0,
+        "range_max": 4095
+    }
 }

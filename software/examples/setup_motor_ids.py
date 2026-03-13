@@ -65,10 +65,21 @@ def find_serial_port() -> str:
     return candidates[int(choice)]
 
 
+def safe_disconnect(bus):
+    """Close the serial port without crashing if motors don't respond."""
+    try:
+        bus.disconnect(disable_torque=False)
+    except Exception:
+        try:
+            bus.port_handler.closePort()
+        except Exception:
+            pass
+
+
 def change_motor_id(port: str, current_id: int, target_id: int):
     bus = FeetechMotorsBus(
         port=port,
-        motors={"motor": Motor(id=target_id, model="sts3215", norm_mode=MotorNormMode.RANGE_M100_100)},
+        motors={"motor": Motor(id=current_id, model="sts3215", norm_mode=MotorNormMode.RANGE_M100_100)},
     )
     bus.connect(handshake=False)
 
@@ -76,11 +87,13 @@ def change_motor_id(port: str, current_id: int, target_id: int):
         print(f"\n  Disabling torque on motor ID {current_id}...")
         bus._disable_torque(current_id, "sts3215", num_retry=3)
 
+        print(f"  Unlocking EEPROM on motor ID {current_id}...")
+        bus._write(55, 1, current_id, 0, num_retry=3)
+
         print(f"  Writing new ID: {current_id} → {target_id}...")
         bus._write(5, 1, current_id, target_id, num_retry=3)
 
         print(f"  Verifying...")
-        comm, error = bus.port_handler, None
         val = bus._read(5, 1, target_id)
         if val is not None:
             print(f"  Read back ID = {val} — SUCCESS")
@@ -94,8 +107,9 @@ def change_motor_id(port: str, current_id: int, target_id: int):
     except Exception as e:
         print(f"  ERROR: {e}")
         print("  Make sure only ONE motor is connected and it's powered on.")
+        print("  If the motor was already assigned an ID, use option [2] or [3] to scan first.")
     finally:
-        bus.disconnect()
+        safe_disconnect(bus)
 
 
 def interactive_mode(port: str):
@@ -160,7 +174,7 @@ def interactive_mode(port: str):
                         print(f"  Found motor at ID {scan_id}")
                 except Exception:
                     pass
-            bus.disconnect()
+            safe_disconnect(bus)
             if not found:
                 print("  No motors found. Check power and connections.")
             else:

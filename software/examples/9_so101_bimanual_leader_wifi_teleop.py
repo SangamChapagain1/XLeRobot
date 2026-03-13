@@ -21,6 +21,12 @@ Controls:
   V       - Toggle VLA inference mode (requires a loaded policy)
   Q / ESC - Quit
 
+  Base movement (keyboard, tap keys in the OpenCV window):
+  i / k   - Forward / Backward
+  j / l   - Strafe Left / Right
+  u / o   - Rotate Left / Right
+  n / m   - Speed Up / Down
+
 Requirements (robotics_env):
   pip install pyzmq opencv-python
   lerobot must be installed in the same env (already done)
@@ -93,6 +99,13 @@ ACTION_SMOOTHING_ALPHA = 0.35
 JOINT_DEADBAND = 0.25
 GRIPPER_DEADBAND = 0.4
 
+# Base control speed levels (keyboard-driven, omnidirectional)
+BASE_SPEED_LEVELS = [
+    {"xy": 0.05, "theta": 20, "label": "SLOW"},
+    {"xy": 0.10, "theta": 40, "label": "MEDIUM"},
+    {"xy": 0.20, "theta": 70, "label": "FAST"},
+]
+
 # Intervention threshold for VLA mode:
 # if any leader joint moves more than this (degrees) in one step, human override activates
 INTERVENTION_THRESHOLD_DEG = 3.0
@@ -129,6 +142,54 @@ BIMANUAL_JOINT_ORDER = [
     "right_arm_elbow_flex.pos",   "right_arm_wrist_flex.pos",
     "right_arm_wrist_roll.pos",   "right_arm_gripper.pos",
 ]
+
+
+# ===========================================================================
+# Base keyboard controller (uses OpenCV key codes from waitKey)
+# ===========================================================================
+
+class KeyboardBaseController:
+    """Tracks base velocity from keyboard presses captured via cv2.waitKey().
+    
+    Keys (active while held; OpenCV only sees one key per waitKey call,
+    so tap repeatedly for continuous motion):
+        i/k  = forward / backward
+        j/l  = strafe left / right
+        u/o  = rotate left / right
+        n/m  = speed up / down
+    """
+
+    def __init__(self):
+        self.speed_idx = 0
+
+    def process_key(self, key: int) -> dict:
+        """Return base velocity dict from a cv2.waitKey result (masked to 0xFF)."""
+        x_cmd = 0.0
+        y_cmd = 0.0
+        theta_cmd = 0.0
+
+        if key == ord("n"):
+            self.speed_idx = min(self.speed_idx + 1, len(BASE_SPEED_LEVELS) - 1)
+            logger.info(f"Base speed: {BASE_SPEED_LEVELS[self.speed_idx]['label']}")
+        elif key == ord("m"):
+            self.speed_idx = max(self.speed_idx - 1, 0)
+            logger.info(f"Base speed: {BASE_SPEED_LEVELS[self.speed_idx]['label']}")
+
+        spd = BASE_SPEED_LEVELS[self.speed_idx]
+        if key == ord("i"):
+            x_cmd = spd["xy"]
+        elif key == ord("k"):
+            x_cmd = -spd["xy"]
+        elif key == ord("j"):
+            y_cmd = spd["xy"]
+        elif key == ord("l"):
+            y_cmd = -spd["xy"]
+        elif key == ord("u"):
+            theta_cmd = spd["theta"]
+        elif key == ord("o"):
+            theta_cmd = -spd["theta"]
+
+        return {"x.vel": x_cmd, "y.vel": y_cmd, "theta.vel": theta_cmd}
 
 
 # ===========================================================================
@@ -298,7 +359,7 @@ class VLAPolicy:
 # Camera display helper
 # ===========================================================================
 
-def show_cameras(frames: dict, recording: bool, vla_mode: bool):
+def show_cameras(frames: dict, recording: bool, vla_mode: bool, base_vel: dict | None = None):
     """Display all available camera frames in one tiled OpenCV window."""
     panels = []
     for name, frame in frames.items():
@@ -306,7 +367,6 @@ def show_cameras(frames: dict, recording: bool, vla_mode: bool):
             frame = np.zeros((240, 320, 3), dtype=np.uint8)
         h, w = frame.shape[:2]
         display = cv2.resize(frame, (320, 240))
-        # Label
         cv2.putText(display, name, (5, 20),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         panels.append(display)
@@ -328,6 +388,13 @@ def show_cameras(frames: dict, recording: bool, vla_mode: bool):
     color = (0, 0, 220) if recording else (0, 200, 0)
     cv2.putText(tile, status, (tile.shape[1] - 120, 20),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+
+    if base_vel:
+        moving = any(v != 0.0 for v in base_vel.values())
+        if moving:
+            bv_str = f"BASE x={base_vel['x.vel']:.2f} y={base_vel['y.vel']:.2f} th={base_vel['theta.vel']:.0f}"
+            cv2.putText(tile, bv_str, (5, tile.shape[0] - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 255), 1)
 
     cv2.imshow("XLeRobot Cameras", tile)
 
@@ -386,13 +453,19 @@ def main():
     # Uncomment to load a real policy:
     # vla_policy.load("SangamChapagain1/your-trained-policy")
 
+    # ---- Base controller ------------------------------------------------
+    base_ctrl = KeyboardBaseController()
+
     # ---- State variables -----------------------------------------------
     recording   = False
     vla_mode    = VLA_ENABLED_AT_START
     prev_leader_action: dict = {}
     prev_smoothed_action: dict = {}
+    base_vel    = {"x.vel": 0.0, "y.vel": 0.0, "theta.vel": 0.0}
 
-    logger.info("Ready! Controls:  R=record  V=VLA mode  Q/ESC=quit")
+    logger.info("Ready! Controls:")
+    logger.info("  R=record  V=VLA mode  Q/ESC=quit")
+    logger.info("  Base: i/k=fwd/bwd  j/l=left/right  u/o=rotate  n/m=speed")
 
     try:
         while not shutdown_event.is_set():
@@ -431,23 +504,25 @@ def main():
             prev_leader_action = leader_action.copy()
 
             # ---- Send action to robot ----------------------------------
-            # Keep head and base at neutral (no keyboard/base control in this script)
+            # Head motors not connected (skipped), base driven by keyboard
             full_action = {
                 **action_to_send,
                 "head_motor_1.pos": 0.0,
                 "head_motor_2.pos": 0.0,
-                "x.vel": 0.0,
-                "y.vel": 0.0,
-                "theta.vel": 0.0,
+                **base_vel,
             }
             robot.send_action(full_action)
 
             # ---- Camera display ----------------------------------------
             frames = {k: observation.get(k) for k in cameras_ft}
-            show_cameras(frames, recording, vla_mode)
+            show_cameras(frames, recording, vla_mode, base_vel)
 
-            # ---- Keyboard input ----------------------------------------
+            # ---- Keyboard input (base + UI controls) -------------------
             key = cv2.waitKey(1) & 0xFF
+
+            # Base velocity from keyboard (resets to zero each frame unless pressed)
+            base_vel = base_ctrl.process_key(key)
+
             if key in (ord("q"), 27):  # Q or ESC
                 logger.info("Quit requested.")
                 break
