@@ -40,9 +40,10 @@ MOTORS = {
 }
 
 SPEED_LEVELS = [
-    {"xy": 0.05, "theta": 20, "label": "SLOW"},
-    {"xy": 0.10, "theta": 40, "label": "MEDIUM"},
-    {"xy": 0.20, "theta": 70, "label": "FAST"},
+    {"xy": 0.15, "theta": 45, "label": "SLOW"},
+    {"xy": 0.30, "theta": 90, "label": "MEDIUM"},
+    {"xy": 0.50, "theta": 140, "label": "FAST"},
+    {"xy": 0.75, "theta": 200, "label": "TURBO"},
 ]
 
 

@@ -101,9 +101,10 @@ GRIPPER_DEADBAND = 0.4
 
 # Base control speed levels (keyboard-driven, omnidirectional)
 BASE_SPEED_LEVELS = [
-    {"xy": 0.05, "theta": 20, "label": "SLOW"},
-    {"xy": 0.10, "theta": 40, "label": "MEDIUM"},
-    {"xy": 0.20, "theta": 70, "label": "FAST"},
+    {"xy": 0.15, "theta": 45, "label": "SLOW"},
+    {"xy": 0.30, "theta": 90, "label": "MEDIUM"},
+    {"xy": 0.50, "theta": 140, "label": "FAST"},
+    {"xy": 0.75, "theta": 200, "label": "TURBO"},
 ]
 
 # Intervention threshold for VLA mode:
@@ -359,22 +360,25 @@ class VLAPolicy:
 # Camera display helper
 # ===========================================================================
 
+CAM_DISPLAY_W = 640
+CAM_DISPLAY_H = 480
+
+
 def show_cameras(frames: dict, recording: bool, vla_mode: bool, base_vel: dict | None = None):
     """Display all available camera frames in one tiled OpenCV window."""
     panels = []
     for name, frame in frames.items():
         if frame is None:
-            frame = np.zeros((240, 320, 3), dtype=np.uint8)
-        h, w = frame.shape[:2]
-        display = cv2.resize(frame, (320, 240))
-        cv2.putText(display, name, (5, 20),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            frame = np.zeros((CAM_DISPLAY_H, CAM_DISPLAY_W, 3), dtype=np.uint8)
+        display = cv2.resize(frame, (CAM_DISPLAY_W, CAM_DISPLAY_H))
+        cv2.putText(display, name, (8, 28),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
         panels.append(display)
 
     if not panels:
-        tile = np.zeros((240, 320, 3), dtype=np.uint8)
-        cv2.putText(tile, "No cameras", (80, 120),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (100, 100, 100), 2)
+        tile = np.zeros((CAM_DISPLAY_H, CAM_DISPLAY_W, 3), dtype=np.uint8)
+        cv2.putText(tile, "No cameras", (200, 240),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.0, (100, 100, 100), 2)
     else:
         tile = np.hstack(panels)
 
@@ -386,15 +390,15 @@ def show_cameras(frames: dict, recording: bool, vla_mode: bool, base_vel: dict |
         status_parts.append("VLA")
     status = "  |  ".join(status_parts) if status_parts else "TELEOP"
     color = (0, 0, 220) if recording else (0, 200, 0)
-    cv2.putText(tile, status, (tile.shape[1] - 120, 20),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+    cv2.putText(tile, status, (tile.shape[1] - 160, 30),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
 
     if base_vel:
         moving = any(v != 0.0 for v in base_vel.values())
         if moving:
             bv_str = f"BASE x={base_vel['x.vel']:.2f} y={base_vel['y.vel']:.2f} th={base_vel['theta.vel']:.0f}"
-            cv2.putText(tile, bv_str, (5, tile.shape[0] - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 255), 1)
+            cv2.putText(tile, bv_str, (8, tile.shape[0] - 15),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
 
     cv2.imshow("XLeRobot Cameras", tile)
 
