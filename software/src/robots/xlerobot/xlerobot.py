@@ -172,17 +172,20 @@ class XLerobot(Robot):
         if self.is_connected:
             raise DeviceAlreadyConnectedError(f"{self} already connected")
 
-        try:
-            self.bus1.connect()
-        except Exception as e:
-            logger.warning(f"bus1 handshake failed ({e}); retrying with handshake disabled.")
-            self.bus1.connect(handshake=False)
-
-        try:
-            self.bus2.connect()
-        except Exception as e:
-            logger.warning(f"bus2 handshake failed ({e}); retrying with handshake disabled.")
-            self.bus2.connect(handshake=False)
+        for label, bus in [("bus1", self.bus1), ("bus2", self.bus2)]:
+            try:
+                bus.connect()
+            except Exception as e:
+                logger.warning(f"{label} handshake failed ({e}); retrying with handshake disabled.")
+                if bus.is_connected:
+                    try:
+                        bus.disconnect(disable_torque=False)
+                    except Exception:
+                        try:
+                            bus.port_handler.closePort()
+                        except Exception:
+                            pass
+                bus.connect(handshake=False)
         
         # Check if calibration file exists and ask user if they want to restore it
         if self.calibration_fpath.is_file():
@@ -193,14 +196,14 @@ class XLerobot(Robot):
             if user_input.strip().lower() != "c":
                 logger.info("Attempting to restore calibration from file...")
                 try:
-                    # Load calibration data into bus memory
-                    self.bus1.calibration = {k: v for k, v in self.calibration.items() if k in self.bus1.motors}
-                    self.bus2.calibration = {k: v for k, v in self.calibration.items() if k in self.bus2.motors}
+                    cal1 = {k: v for k, v in self.calibration.items() if k in self.bus1.motors and v is not None}
+                    cal2 = {k: v for k, v in self.calibration.items() if k in self.bus2.motors and v is not None}
+                    self.bus1.calibration = cal1
+                    self.bus2.calibration = cal2
                     logger.info("Calibration data loaded into bus memory successfully!")
                     
-                    # Write calibration data to motors
-                    self.bus1.write_calibration({k: v for k, v in self.calibration.items() if k in self.bus1.motors})
-                    self.bus2.write_calibration({k: v for k, v in self.calibration.items() if k in self.bus2.motors})
+                    self.bus1.write_calibration(cal1)
+                    self.bus2.write_calibration(cal2)
                     logger.info("Calibration restored successfully from file!")
                     
                 except Exception as e:
