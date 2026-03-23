@@ -208,6 +208,11 @@ class XLerobotClient(Robot):
         state_vec = np.array([flat_state[key] for key in self._state_order], dtype=np.float32)
 
         obs_dict: Dict[str, Any] = {**flat_state, "observation.state": state_vec}
+        # Pass-through host telemetry metadata for latency estimation on client side.
+        if "_t_cmd_client_echo" in observation:
+            obs_dict["_t_cmd_client_echo"] = observation["_t_cmd_client_echo"]
+        if "_cmd_seq_echo" in observation:
+            obs_dict["_cmd_seq_echo"] = observation["_cmd_seq_echo"]
 
         # Decode images
         current_frames: Dict[str, np.ndarray] = {}

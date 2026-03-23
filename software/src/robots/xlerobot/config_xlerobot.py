@@ -109,6 +109,9 @@ class XLerobotHostConfig:
     # If robot jitters decrease the frequency and monitor cpu load with `top` in cmd
     # 50 Hz for bimanual WiFi teleop; drop back to 30 if Jetson CPU load is too high
     max_loop_freq_hz: int = 50
+    # Lower JPEG quality reduces bandwidth and host CPU load.
+    # 70-80 is usually visually good enough for teleop.
+    jpeg_quality: int = 75
 
 @RobotConfig.register_subclass("xlerobot_client")
 @dataclass

@@ -41,6 +41,7 @@ class XLerobotHost:
         self.connection_time_s = config.connection_time_s
         self.watchdog_timeout_ms = config.watchdog_timeout_ms
         self.max_loop_freq_hz = config.max_loop_freq_hz
+        self.jpeg_quality = config.jpeg_quality
 
     def disconnect(self):
         self.zmq_observation_socket.close()
@@ -77,12 +78,16 @@ def main():
         # Business logic
         start = time.perf_counter()
         duration = 0
+        last_cmd_client_ts = None
+        last_cmd_seq = None
         while duration < host.connection_time_s:
             loop_start_time = time.time()
             try:
                 msg = host.zmq_cmd_socket.recv_string(zmq.NOBLOCK)
                 data = dict(json.loads(msg))
                 _action_sent = robot.send_action(data)
+                last_cmd_client_ts = data.get("_t_cmd_client")
+                last_cmd_seq = data.get("_cmd_seq")
                 last_cmd_time = time.time()
                 watchdog_active = False
             except zmq.Again:
@@ -100,11 +105,15 @@ def main():
                 robot.stop_base()
 
             last_observation = robot.get_observation()
+            if last_cmd_client_ts is not None:
+                last_observation["_t_cmd_client_echo"] = last_cmd_client_ts
+            if last_cmd_seq is not None:
+                last_observation["_cmd_seq_echo"] = last_cmd_seq
 
             # Encode ndarrays to base64 strings
             for cam_key, _ in robot.cameras.items():
                 ret, buffer = cv2.imencode(
-                    ".jpg", last_observation[cam_key], [int(cv2.IMWRITE_JPEG_QUALITY), 90]
+                    ".jpg", last_observation[cam_key], [int(cv2.IMWRITE_JPEG_QUALITY), host.jpeg_quality]
                 )
                 if ret:
                     last_observation[cam_key] = base64.b64encode(buffer).decode("utf-8")
@@ -113,7 +122,8 @@ def main():
 
             # Send the observation to the remote agent
             try:
-                host.zmq_observation_socket.send_string(json.dumps(last_observation), flags=zmq.NOBLOCK)
+                payload = json.dumps(last_observation, separators=(",", ":"))
+                host.zmq_observation_socket.send_string(payload, flags=zmq.NOBLOCK)
             except zmq.Again:
                 logging.info("Dropping observation, no client connected")
 

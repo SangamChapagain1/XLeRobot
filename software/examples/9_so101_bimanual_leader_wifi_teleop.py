@@ -94,14 +94,21 @@ FPS = 30
 
 # Slow-speed smoothing to reduce follower arm jitter.
 # Higher alpha -> more responsive, lower alpha -> smoother.
-ACTION_SMOOTHING_ALPHA = 0.35
+ACTION_SMOOTHING_ALPHA = 0.25
 # Ignore tiny command changes (units are leader action units).
-JOINT_DEADBAND = 0.25
-GRIPPER_DEADBAND = 0.4
+JOINT_DEADBAND = 0.35
+GRIPPER_DEADBAND = 0.6
+# Per-frame rate limit to suppress tiny oscillations from hand tremor/sensor noise.
+MAX_JOINT_STEP_PER_FRAME = 1.2
+MAX_GRIPPER_STEP_PER_FRAME = 1.8
 
 # Fixed base speed — one speed, no fiddling
 BASE_XY_SPEED = 1.0     # m/s linear
 BASE_THETA_SPEED = 300   # deg/s rotation
+# Keep last non-zero base command alive briefly between key-repeat events.
+# This avoids pulse-stop jitter when OS key-repeat is slower than control loop FPS.
+BASE_CMD_HOLD_S = 0.18
+METRICS_LOG_INTERVAL_S = 1.0
 
 # Intervention threshold for VLA mode:
 # if any leader joint moves more than this (degrees) in one step, human override activates
@@ -150,16 +157,41 @@ class KeyboardBaseController:
     
     Keys:  i/k = fwd/bwd,  j/l = left/right,  u/o = rotate
     """
+    def __init__(self, hold_s: float = BASE_CMD_HOLD_S):
+        self.hold_s = hold_s
+        self._last_move_ts = 0.0
+        self._base_vel = {"x.vel": 0.0, "y.vel": 0.0, "theta.vel": 0.0}
 
-    def process_key(self, key: int) -> dict:
-        x, y, th = 0.0, 0.0, 0.0
-        if key == ord("i"):   x = BASE_XY_SPEED
-        elif key == ord("k"): x = -BASE_XY_SPEED
-        elif key == ord("j"): y = BASE_XY_SPEED
-        elif key == ord("l"): y = -BASE_XY_SPEED
-        elif key == ord("u"): th = BASE_THETA_SPEED
-        elif key == ord("o"): th = -BASE_THETA_SPEED
-        return {"x.vel": x, "y.vel": y, "theta.vel": th}
+    def process_key(self, key: int, now_s: float) -> dict:
+        """Turn sparse key events into a continuous base velocity command."""
+        x, y, th = self._base_vel["x.vel"], self._base_vel["y.vel"], self._base_vel["theta.vel"]
+
+        if key == ord("i"):
+            x, y, th = BASE_XY_SPEED, 0.0, 0.0
+            self._last_move_ts = now_s
+        elif key == ord("k"):
+            x, y, th = -BASE_XY_SPEED, 0.0, 0.0
+            self._last_move_ts = now_s
+        elif key == ord("j"):
+            x, y, th = 0.0, BASE_XY_SPEED, 0.0
+            self._last_move_ts = now_s
+        elif key == ord("l"):
+            x, y, th = 0.0, -BASE_XY_SPEED, 0.0
+            self._last_move_ts = now_s
+        elif key == ord("u"):
+            x, y, th = 0.0, 0.0, BASE_THETA_SPEED
+            self._last_move_ts = now_s
+        elif key == ord("o"):
+            x, y, th = 0.0, 0.0, -BASE_THETA_SPEED
+            self._last_move_ts = now_s
+        elif key == ord(" "):
+            x, y, th = 0.0, 0.0, 0.0
+            self._last_move_ts = 0.0
+        elif now_s - self._last_move_ts > self.hold_s:
+            x, y, th = 0.0, 0.0, 0.0
+
+        self._base_vel = {"x.vel": x, "y.vel": y, "theta.vel": th}
+        return self._base_vel.copy()
 
 
 # ===========================================================================
@@ -197,6 +229,39 @@ def smooth_action(raw_action: dict, prev_action: dict) -> dict:
             smoothed = prev
         out[key] = float(smoothed)
     return out
+
+
+def rate_limit_action(target_action: dict, prev_action: dict) -> dict:
+    """
+    Clamp per-frame joint deltas to reduce command chatter-induced arm jitter.
+    """
+    if not prev_action:
+        return target_action.copy()
+
+    out = {}
+    for key, target in target_action.items():
+        prev = prev_action.get(key, target)
+        max_step = MAX_GRIPPER_STEP_PER_FRAME if "gripper" in key else MAX_JOINT_STEP_PER_FRAME
+        delta = target - prev
+        if delta > max_step:
+            target = prev + max_step
+        elif delta < -max_step:
+            target = prev - max_step
+        out[key] = float(target)
+    return out
+
+
+def arm_tracking_error(observation: dict, command: dict) -> tuple[float, float]:
+    """
+    Returns (mean_abs_error, max_abs_error) on the 12 arm joints.
+    """
+    errors = []
+    for key in BIMANUAL_JOINT_ORDER:
+        if key in observation and key in command:
+            errors.append(abs(float(observation[key]) - float(command[key])))
+    if not errors:
+        return 0.0, 0.0
+    return float(np.mean(errors)), float(np.max(errors))
 
 
 # ===========================================================================
@@ -434,11 +499,17 @@ def main():
     vla_mode    = VLA_ENABLED_AT_START
     prev_leader_action: dict = {}
     prev_smoothed_action: dict = {}
+    prev_sent_arm_action: dict = {}
     base_vel    = {"x.vel": 0.0, "y.vel": 0.0, "theta.vel": 0.0}
+    cmd_seq = 0
+    rtt_ema_ms = None
+    err_mean_ema = None
+    err_max_ema = None
+    last_metrics_log = time.perf_counter()
 
     logger.info("Ready! Controls:")
     logger.info("  R=record  V=VLA mode  Q/ESC=quit")
-    logger.info("  Base: i/k=fwd/bwd  j/l=left/right  u/o=rotate  n/m=speed")
+    logger.info("  Base: i/k=fwd/bwd  j/l=left/right  u/o=rotate  SPACE=stop")
 
     try:
         while not shutdown_event.is_set():
@@ -446,8 +517,10 @@ def main():
 
             # ---- Read leader arms --------------------------------------
             raw_leader_action = read_leaders(left_leader, right_leader)
-            leader_action = smooth_action(raw_leader_action, prev_smoothed_action)
-            prev_smoothed_action = leader_action.copy()
+            smoothed_leader_action = smooth_action(raw_leader_action, prev_smoothed_action)
+            leader_action = rate_limit_action(smoothed_leader_action, prev_sent_arm_action)
+            prev_smoothed_action = smoothed_leader_action.copy()
+            prev_sent_arm_action = leader_action.copy()
 
             # ---- VLA inference + intervention detection ----------------
             if vla_mode:
@@ -476,16 +549,6 @@ def main():
 
             prev_leader_action = leader_action.copy()
 
-            # ---- Send action to robot ----------------------------------
-            # Head motors not connected (skipped), base driven by keyboard
-            full_action = {
-                **action_to_send,
-                "head_motor_1.pos": 0.0,
-                "head_motor_2.pos": 0.0,
-                **base_vel,
-            }
-            robot.send_action(full_action)
-
             # ---- Camera display ----------------------------------------
             frames = {k: observation.get(k) for k in cameras_ft}
             show_cameras(frames, recording, vla_mode, base_vel)
@@ -493,8 +556,8 @@ def main():
             # ---- Keyboard input (base + UI controls) -------------------
             key = cv2.waitKey(1) & 0xFF
 
-            # Base velocity from keyboard (resets to zero each frame unless pressed)
-            base_vel = base_ctrl.process_key(key)
+            # Convert sparse key-repeat events into continuous velocity commands.
+            base_vel = base_ctrl.process_key(key, time.perf_counter())
 
             if key in (ord("q"), 27):  # Q or ESC
                 logger.info("Quit requested.")
@@ -518,6 +581,41 @@ def main():
             elif key == ord("v"):
                 vla_mode = not vla_mode
                 logger.info(f"VLA mode: {'ON' if vla_mode else 'OFF'}")
+
+            # ---- Send action to robot ----------------------------------
+            # Head motors not connected (skipped), base driven by keyboard
+            cmd_seq += 1
+            full_action = {
+                **action_to_send,
+                "head_motor_1.pos": 0.0,
+                "head_motor_2.pos": 0.0,
+                **base_vel,
+                "_t_cmd_client": time.perf_counter(),
+                "_cmd_seq": cmd_seq,
+            }
+            robot.send_action(full_action)
+
+            # ---- Telemetry: RTT + arm tracking error -------------------
+            echoed_ts = observation.get("_t_cmd_client_echo")
+            if echoed_ts is not None:
+                rtt_ms = max(0.0, (time.perf_counter() - float(echoed_ts)) * 1000.0)
+                rtt_ema_ms = rtt_ms if rtt_ema_ms is None else (0.9 * rtt_ema_ms + 0.1 * rtt_ms)
+
+            err_mean, err_max = arm_tracking_error(observation, action_to_send)
+            err_mean_ema = err_mean if err_mean_ema is None else (0.9 * err_mean_ema + 0.1 * err_mean)
+            err_max_ema = err_max if err_max_ema is None else (0.9 * err_max_ema + 0.1 * err_max)
+
+            now = time.perf_counter()
+            if now - last_metrics_log >= METRICS_LOG_INTERVAL_S:
+                if rtt_ema_ms is not None:
+                    logger.info(
+                        f"telemetry | rtt~{rtt_ema_ms:.1f}ms | arm_err_mean~{err_mean_ema:.2f} | arm_err_max~{err_max_ema:.2f}"
+                    )
+                else:
+                    logger.info(
+                        f"telemetry | arm_err_mean~{err_mean_ema:.2f} | arm_err_max~{err_max_ema:.2f} | rtt pending"
+                    )
+                last_metrics_log = now
 
             # ---- Record frame if active ---------------------------------
             if recording and dataset is not None and not saving_event.is_set():
