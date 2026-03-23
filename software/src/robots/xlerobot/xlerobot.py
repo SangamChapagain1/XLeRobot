@@ -330,20 +330,25 @@ class XLerobot(Robot):
         print("Calibration saved to", self.calibration_fpath)
         
 
+    def _configure_arm_motor(self, bus, name):
+        """Configure a single arm motor with position mode and tuned PID + overload protection."""
+        bus.write("Operating_Mode", name, OperatingMode.POSITION.value)
+        bus.write("P_Coefficient", name, 16)
+        bus.write("I_Coefficient", name, 0)
+        bus.write("D_Coefficient", name, 32)
+        # Raise overload protection thresholds to prevent premature shutdown
+        bus.write("Overload_Torque", name, 100)
+        bus.write("Protection_Time", name, 200)
+        bus.write("Protection_Current", name, 500)
+
     def configure(self):
         if self._bus1_alive:
             self.bus1.disable_torque()
             self.bus1.configure_motors()
             for name in self.left_arm_motors:
-                self.bus1.write("Operating_Mode", name, OperatingMode.POSITION.value)
-                self.bus1.write("P_Coefficient", name, 16)
-                self.bus1.write("I_Coefficient", name, 0)
-                self.bus1.write("D_Coefficient", name, 43)
+                self._configure_arm_motor(self.bus1, name)
             for name in self.head_motors:
-                self.bus1.write("Operating_Mode", name, OperatingMode.POSITION.value)
-                self.bus1.write("P_Coefficient", name, 16)
-                self.bus1.write("I_Coefficient", name, 0)
-                self.bus1.write("D_Coefficient", name, 43)
+                self._configure_arm_motor(self.bus1, name)
             self.bus1.enable_torque()
         else:
             logger.warning("bus1 has no responding motors — skipping configure.")
@@ -352,10 +357,7 @@ class XLerobot(Robot):
             self.bus2.disable_torque()
             self.bus2.configure_motors()
             for name in self.right_arm_motors:
-                self.bus2.write("Operating_Mode", name, OperatingMode.POSITION.value)
-                self.bus2.write("P_Coefficient", name, 16)
-                self.bus2.write("I_Coefficient", name, 0)
-                self.bus2.write("D_Coefficient", name, 43)
+                self._configure_arm_motor(self.bus2, name)
             for name in self.base_motors:
                 self.bus2.write("Operating_Mode", name, OperatingMode.VELOCITY.value)
             self.bus2.enable_torque()

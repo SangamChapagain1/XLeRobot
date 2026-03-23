@@ -101,7 +101,7 @@ class XLerobotHostConfig:
     port_zmq_observations: int = 5556
 
     # Duration of the application
-    connection_time_s: int = 3600
+    connection_time_s: int = 28800  # 8 hours
 
     # Watchdog: stop the robot if no command is received for over 0.5 seconds.
     watchdog_timeout_ms: int = 500
